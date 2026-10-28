@@ -1509,6 +1509,30 @@
     var host = el('div', 'view');
     var st = Store.get().settings;
     var hasVoice = S.hasVoice();
+    var KINDS = [
+      { id: 'female', emo: '👩', name: '女声', sub: '老师 · 温柔' },
+      { id: 'male', emo: '👨', name: '男声', sub: '爸爸 · 低沉' },
+      { id: 'child', emo: '🧒', name: '童声', sub: '小伙伴 · 尖细' }
+    ];
+    var curKind = (S.kind && S.kind()) || st.voiceKind || 'female';
+    var curName = (S.voiceNameSetting && S.voiceNameSetting()) || '';
+    var vList = (S.voiceList && S.voiceList()) || [];
+
+    function chipLabel(v) {
+      var n = String(v.name).replace(/\s*-\s*Chinese.*$/i, '').replace(/^Microsoft\s+/i, '')
+        .replace(/\s*Online\s*\(Natural\)$/i, '').replace(/\s*Desktop$/i, '');
+      return n + (v.sex === 'female' ? ' ♀' : v.sex === 'male' ? ' ♂' : '');
+    }
+    function voiceLine() {
+      if (!S.hasVoice()) return '⚠️ 这台设备没找到中文语音：先装一个中文语音包，或者用 Edge 打开。';
+      var n = S.voiceName().replace(/^Microsoft\s+/i, '');
+      var sexNow = S.sex ? S.sex() : '';
+      var note = '';
+      if (curKind === 'child') note = '，把音调调高、语速略慢（系统一般没有真童声）';
+      else if (curKind === 'male' && sexNow && sexNow !== 'male') note = '，这是女声压低音调模拟的（设备上没有男声）';
+      else if (curKind !== 'male' && sexNow === 'male') note = '，这是男声调高音调模拟的（设备上没有女声）';
+      return '当前：' + S.kindLabel() + ' · ' + n + note;
+    }
     var html = '<div class="sect-h" style="margin-top:0"><h2>设置</h2><span>给爸爸妈妈</span></div>';
     html += '<div class="unit-list">';
     html += rowSwitch('voice', '🔊 语音朗读', '读字母、读字音', st.voice !== false);
@@ -1517,6 +1541,22 @@
     html += '<div class="unit-row"><span class="u-emo">🐢</span><span class="u-body"><span class="u-t">朗读语速</span>' +
       '<span class="u-s"><input type="range" min="0.5" max="1.2" step="0.05" value="' + (st.rate || 0.85) + '" id="rateRange" style="width:100%"></span></span></div>';
     html += '</div>';
+    html += '<div class="sect-h"><h2>声音角色</h2><span>点一下就换</span></div>';
+    html += '<div class="voice-grid" id="vGrid">' + KINDS.map(function (k) {
+      return '<button class="voice-btn' + (curKind === k.id ? ' on' : '') + '" data-kind="' + k.id + '" aria-label="' + k.name + '">' +
+        '<span class="vb-emo">' + k.emo + '</span>' +
+        '<span class="vb-n">' + k.name + '</span>' +
+        '<span class="vb-s">' + k.sub + '</span></button>';
+    }).join('') + '</div>';
+    html += '<p class="voice-info" id="vInfo">' + voiceLine() + '</p>';
+    if (vList.length > 1) {
+      html += '<div class="voice-chips" id="vChips">' +
+        '<button class="vchip' + (curName ? '' : ' on') + '" data-vi="-1">自动</button>' +
+        vList.map(function (v, i) {
+          return '<button class="vchip' + (curName === v.name ? ' on' : '') + '" data-vi="' + i + '">' + chipLabel(v) + '</button>';
+        }).join('') + '</div>';
+      html += '<p class="voice-info">同一台设备上能挑的发音人都在这里；标 ♀ ♂ 的是系统里的女声 / 男声。</p>';
+    }
     html += '<div class="sect-h"><h2>语音检查</h2></div>';
     html += '<div class="unit-row"><span class="u-emo">' + (hasVoice ? '✅' : '⚠️') + '</span><span class="u-body">' +
       '<span class="u-t">' + (hasVoice ? '已找到中文语音' : '没有找到中文语音') + '</span>' +
@@ -1558,6 +1598,38 @@
       Store.setting('rate', +rr.value);
       S.setRate(+rr.value);
     };
+    host.querySelectorAll('[data-kind]').forEach(function (b) {
+      b.onclick = function () {
+        sfx('tap');
+        var k = b.dataset.kind;
+        Store.setting('voiceKind', k);
+        S.setKind(k);
+        curKind = k;
+        // 手动选过的发音人如果和音色不匹配，就退回自动
+        if (curName) {
+          var wantSex = k === 'male' ? 'male' : 'female';
+          if (S.sex && S.sex() !== wantSex) { Store.setting('voiceName', ''); S.setVoiceName(''); curName = ''; }
+        }
+        host.querySelectorAll('[data-kind]').forEach(function (x) { x.classList.toggle('on', x.dataset.kind === k); });
+        var chips = host.querySelector('#vChips');
+        if (chips) chips.querySelectorAll('.vchip').forEach(function (c) { c.classList.toggle('on', c.dataset.vi === '-1' && !curName); });
+        host.querySelector('#vInfo').textContent = voiceLine();
+        S.say('你好呀，我们一起读拼音吧', { rate: Store.setting('rate') });
+      };
+    });
+    host.querySelectorAll('[data-vi]').forEach(function (b) {
+      b.onclick = function () {
+        sfx('tap');
+        var i = +b.dataset.vi;
+        var name = i < 0 ? '' : (vList[i] ? vList[i].name : '');
+        Store.setting('voiceName', name);
+        S.setVoiceName(name);
+        curName = name;
+        host.querySelectorAll('[data-vi]').forEach(function (x) { x.classList.toggle('on', x === b); });
+        host.querySelector('#vInfo').textContent = voiceLine();
+        S.say('你好呀，我们一起学拼音吧', { rate: Store.setting('rate') });
+      };
+    });
     host.querySelector('#testVoice').onclick = function () {
       S.say('小朋友你好，我们一起来学拼音吧', { rate: Store.setting('rate') });
     };

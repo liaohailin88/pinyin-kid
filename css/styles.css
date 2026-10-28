@@ -670,6 +670,27 @@ button { cursor: pointer; border: none; background: none; color: inherit; }
   .tian { width: 300px; }
 }
 
+/* ---------------- 设置 · 声音角色 ---------------- */
+.voice-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 0 0 12px; }
+.voice-btn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  padding: 14px 6px; border-radius: var(--r-md); background: #fff;
+  box-shadow: var(--shadow-1); border: 3px solid transparent;
+}
+.voice-btn:active { transform: translateY(1px) scale(.99); }
+.voice-btn .vb-emo { font-size: 30px; line-height: 1.15; }
+.voice-btn .vb-n { font-size: 17px; font-weight: 900; }
+.voice-btn .vb-s { font-size: 11.5px; font-weight: 700; color: var(--ink-2); }
+.voice-btn.on { border-color: #ff8a00; background: #fff7e8; }
+.voice-info { margin: 0 0 12px; font-size: 12.5px; font-weight: 700; color: var(--ink-2); line-height: 1.55; }
+.voice-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 4px; }
+.vchip {
+  min-height: 44px; padding: 10px 14px; border-radius: 999px; background: #fff;
+  box-shadow: var(--shadow-1); font-size: 13.5px; font-weight: 800; color: var(--ink-2);
+}
+.vchip.on { background: linear-gradient(135deg, var(--brand), var(--brand-deep)); color: #fff; }
+@media (max-width: 380px) { .voice-btn .vb-s { display: none; } }
+
 /* 横屏小高度 */
 @media (max-height: 620px) {
   .card-stage { min-height: auto; padding: 8px 0; }

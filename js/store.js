@@ -13,7 +13,7 @@
     cards: {},          // key -> { right, wrong, last, box }  box: 0..5 记忆盒
     errors: {},         // 错题 key -> 次数
     days: {},           // '2026-01-01' -> 当日题数
-    settings: { voice: true, sfx: true, rate: 0.85, asr: false, showToneColor: true },
+    settings: { voice: true, sfx: true, rate: 0.85, asr: false, showToneColor: true, voiceKind: 'female', voiceName: '' },
     unlocked: 1,        // 已解锁的关卡数（渐进开放）
     sel: { book: 'all' }
   };

@@ -151,7 +151,35 @@ const SHOT = 'F:\\harness0916\\pinyin-kid\\_shots';
   await page.evaluate(() => { location.hash = '#/settings'; });
   await page.waitForTimeout(500);
   R.settingRows = await page.locator('.unit-row').count();
-  await shot('13-settings');
+  R.voiceKinds = await page.locator('[data-kind]').count();
+  R.voiceChips = await page.locator('.vchip').count();
+  await page.evaluate(() => {
+    window.__said = [];
+    try {
+      window.speechSynthesis.speak = function (u) { window.__said.push({ t: u.text, p: u.pitch, r: u.rate }); };
+    } catch (e) { window.__sayErr = String(e); }
+  });
+  async function pickKind(k) {
+    await page.locator('[data-kind="' + k + '"]').click();
+    await page.waitForTimeout(300);
+    return page.evaluate(() => {
+      var st = (JSON.parse(localStorage.getItem('pinyin-planet-v1')) || {}).settings || {};
+      var s = (window.__said || []).slice(-1)[0] || null;
+      return { saved: st.voiceKind, pitch: s ? +s.p.toFixed(3) : null, rate: s ? +s.r.toFixed(3) : null, info: (document.querySelector('#vInfo') || {}).textContent };
+    });
+  }
+  R.vkFemale = await pickKind('female');
+  R.vkMale = await pickKind('male');
+  R.vkChild = await pickKind('child');
+  if (R.voiceChips > 1) {
+    await page.locator('.vchip').nth(1).click();
+    await page.waitForTimeout(300);
+    R.chipPick = await page.evaluate(() => ({
+      saved: ((JSON.parse(localStorage.getItem('pinyin-planet-v1')) || {}).settings || {}).voiceName,
+      info: (document.querySelector('#vInfo') || {}).textContent
+    }));
+  }
+  await shot('19-settings-voice');
 
   await page.evaluate(() => { location.hash = '#/badges'; });
   await page.waitForTimeout(400);

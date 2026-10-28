@@ -13,12 +13,46 @@
   var enabled = true;
   var rate = 0.85;
 
+  /* ---------- 音色：女声 / 男声 / 童声 ---------- */
+  var kind = 'female';          // female | male | child
+  var wantName = '';            // 手动指定的发音人（空 = 自动挑）
+  var KIND_PITCH = { female: 1.15, male: 0.8, child: 1.62 };
+  var KIND_RATE = { female: 1, male: 1, child: 0.92 };
+
+  var FEMALE_RE = /Huihui|Yaoyao|Xiaoxiao|Xiaoyi|Xiaohan|Xiaomo|Xiaoxuan|Xiaorui|Xiaoshuang|Yunxia|Yuning|Yunye|Yunmeng|Female|女/i;
+  var MALE_RE = /Kangkang|Yunxi|Yunjian|Yunyang|Yunfeng|Yunhao|Yunze|Yunjie|Yunbo|Yunye-male|Male|男/i;
+
+  function isZh(v) {
+    return /^zh/i.test(v.lang) || /Chinese|中文|普通话|Xiaoxiao|Yunxi|Huihui|Kangkang|Yaoyao/i.test(v.name);
+  }
+
+  function sexOf(v) {
+    var n = (v.name || '') + ' ' + (v.voiceURI || '');
+    if (FEMALE_RE.test(n)) return 'female';   // 先判女声，避免 Yunxia 被 Yunxi 抢走
+    if (MALE_RE.test(n)) return 'male';
+    return '';
+  }
+
+  function zhVoices() {
+    return (voices || []).filter(function (v) { return isZh(v); });
+  }
+
   function pickVoice() {
     if (!synth) return;
     voices = synth.getVoices() || [];
-    var zh = voices.filter(function (v) { return /^zh/i.test(v.lang) || /Chinese|中文|普通话|Xiaoxiao|Yunxi|Huihui|Kangkang/i.test(v.name); });
-    // 优先本地（离线可用）、女声
-    zhVoice = zh.filter(function (v) { return v.localService; })[0] || zh[0] || null;
+    var zh = zhVoices();
+    if (!zh.length) { zhVoice = null; return; }
+
+    // 1) 手动指定
+    if (wantName) {
+      for (var i = 0; i < zh.length; i++) if (zh[i].name === wantName) { zhVoice = zh[i]; return; }
+    }
+    // 2) 按音色挑
+    var want = kind === 'male' ? 'male' : 'female';
+    var pref = zh.filter(function (v) { return sexOf(v) === want; });
+    if (!pref.length) pref = zh;
+    // 3) 本地优先（离线也能读）
+    zhVoice = pref.filter(function (v) { return v.localService; })[0] || pref[0];
   }
   if (synth) {
     pickVoice();
@@ -68,10 +102,32 @@
     hasVoice: function () { if (!voices.length) pickVoice(); return !!zhVoice; },
     voiceName: function () { if (!voices.length) pickVoice(); return zhVoice ? zhVoice.name : ''; },
 
+    /** 音色：female / male / child */
+    setKind: function (k) {
+      kind = KIND_PITCH[k] ? k : 'female';
+      pickVoice();
+      return kind;
+    },
+    kind: function () { return kind; },
+    kindLabel: function () { return kind === 'male' ? '男声' : kind === 'child' ? '童声' : '女声'; },
+    sex: function () { return zhVoice ? sexOf(zhVoice) : ''; },
+
+    /** 手动指定发音人；传空字符串 = 自动 */
+    setVoiceName: function (n) { wantName = n || ''; pickVoice(); },
+    voiceNameSetting: function () { return wantName; },
+
+    /** 设备上所有中文发音人，供设置页选择 */
+    voiceList: function () {
+      if (!voices.length) pickVoice();
+      return zhVoices().map(function (v) {
+        return { name: v.name, lang: v.lang, local: !!v.localService, sex: sexOf(v) };
+      });
+    },
+
     /**
      * 朗读
      * @param {string} text 要读的文字
-     * @param {object} opt { rate, pitch, interrupt, onend }
+     * @param {object} opt { rate, pitch, interrupt, onend, onboundary, onerror }
      */
     say: function (text, opt) {
       opt = opt || {};
@@ -82,8 +138,12 @@
         var u = new SpeechSynthesisUtterance(text);
         u.lang = 'zh-CN';
         if (zhVoice) u.voice = zhVoice;
-        u.rate = opt.rate != null ? opt.rate : rate;
-        u.pitch = opt.pitch != null ? opt.pitch : 1.15;
+        // 音色靠 音调 体现（系统里通常没有童声，就把女声调高、调慢）
+        var basePitch = opt.pitch != null ? opt.pitch : 1.15;
+        var p = basePitch * (KIND_PITCH[kind] || 1.15) / 1.15;
+        u.pitch = Math.max(0.1, Math.min(2, p));
+        var baseRate = opt.rate != null ? opt.rate : rate;
+        u.rate = Math.max(0.1, Math.min(2, baseRate * (KIND_RATE[kind] || 1)));
         u.volume = 1;
         if (opt.onend) u.onend = opt.onend;
         if (opt.onerror) u.onerror = opt.onerror;
@@ -127,6 +187,9 @@
     apply: function (st) {
       enabled = st.voice !== false;
       rate = st.rate || 0.85;
+      kind = KIND_PITCH[st.voiceKind] ? st.voiceKind : 'female';
+      wantName = st.voiceName || '';
+      pickVoice();
     }
   };
 
