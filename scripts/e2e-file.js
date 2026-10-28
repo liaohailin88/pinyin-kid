@@ -1,0 +1,34 @@
+// 直接双击打开（file://）是否可用
+const { chromium } = require(process.env.TEMP + '/e2e/node_modules/playwright-core');
+const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+const URL = 'file:///F:/harness0916/pinyin-kid/index.html';
+
+(async () => {
+  const browser = await chromium.launch({ executablePath: EDGE, headless: true, args: ['--no-sandbox', '--allow-file-access-from-files'] });
+  const page = await browser.newPage({ viewport: { width: 820, height: 1180 } });
+  const errors = [];
+  page.on('pageerror', e => errors.push('pageerror: ' + e.message));
+  page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+  await page.addInitScript(() => localStorage.setItem('pinyin-planet-welcomed', '1'));
+  await page.goto(URL, { waitUntil: 'load' });
+  await page.waitForTimeout(800);
+  const R = {};
+  R.tiles = await page.locator('.tile').count();
+  await page.evaluate(() => { location.hash = '#/write'; });
+  await page.waitForTimeout(4000);
+  R.writeStroke = await page.locator('#strokeInfo').innerText().catch(() => '');
+  R.writePaths = await page.locator('#hwHost svg path').count();
+  R.bulkLoaded = await page.evaluate(() => !!(window.HANZI_STROKES && Object.keys(window.HANZI_STROKES).length));
+  await page.evaluate(() => { location.hash = '#/chart'; });
+  await page.waitForTimeout(500);
+  R.chartCells = await page.locator('.pc-cell').count();
+  await page.evaluate(() => { location.hash = '#/char'; });
+  await page.waitForTimeout(400);
+  await page.locator('#allChars').click();
+  await page.waitForTimeout(600);
+  R.charOpts = await page.locator('.opt').count();
+  console.log(JSON.stringify(R, null, 2));
+  console.log('--- ERRORS (' + errors.length + ') ---');
+  errors.slice(0, 12).forEach(e => console.log(e));
+  await browser.close();
+})();
