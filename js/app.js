@@ -1200,9 +1200,15 @@
           html += '</div>';
         });
       } else {
-        var saved = Store.get().customText || '';
-        html += '<p class="tx-hint">把课文粘进来（或照着课本打），会自动加拼音，然后一句一句读。</p>' +
-          '<textarea class="tx-ta" id="txTa" placeholder="例：天气凉了，树叶黄了。一片片叶子从树上落下来。">' + saved + '</textarea>' +
+        var saved = (Store.get().customText || '').trim();
+        html += '<p class="tx-hint">把课文粘进来（或照着课本打），会自动加拼音，然后一句一句读。</p>';
+        if (saved) {
+          var brief = saved.replace(/\s+/g, ' ').slice(0, 22) + (saved.length > 22 ? '…' : '');
+          html += '<button class="tx-card tx-mine" id="txMineOpen">' +
+            '<span class="tx-t">上次粘的课文</span>' +
+            '<span class="tx-m">' + brief + ' · ' + saved.length + ' 字</span></button>';
+        }
+        html += '<textarea class="tx-ta" id="txTa" placeholder="例：天气凉了，树叶黄了。一片片叶子从树上落下来。">' + saved + '</textarea>' +
           '<div class="btn-row" style="max-width:560px">' +
           '<button class="btn primary" id="txGen">生成拼音 · 开始读</button>' +
           '<button class="btn ghost" id="txClear">清空</button></div>' +
@@ -1231,34 +1237,42 @@
           open({ title: g.title, meta: g.lines.length + ' 句 · 课本短句', lines: g.lines, from: 'lesson' }, +b.dataset.l);
         };
       });
+      var ta = host.querySelector('#txTa');
+      function genFrom(raw, tipEl) {
+        if (!raw) { toast('先粘贴一段课文哦'); if (ta) ta.focus(); return; }
+        if (raw.length > 2000) { toast('太长啦，先粘一小段（2000 字以内）'); return; }
+        Store.set('customText', raw);
+        if (tipEl) tipEl.textContent = '正在加拼音…';
+        function go(noPy) {
+          if (!host.isConnected) return;
+          var lines = splitSentences(raw).slice(0, 60).map(function (cn) {
+            return { cn: cn, py: noPy ? null : annotate(cn) };
+          });
+          open({
+            title: '我的课文',
+            meta: lines.length + ' 句 · ' + (noPy ? '无拼音' : '自动注音'),
+            lines: lines, from: 'mine'
+          });
+        }
+        loadPinyinPro().then(function () { go(false); }).catch(function () {
+          toast('拼音包没加载上，先按没有拼音朗读');
+          go(true);
+        });
+      }
       var gen = host.querySelector('#txGen');
       if (gen) {
-        var ta = host.querySelector('#txTa');
         gen.onclick = function () {
           sfx('tap');
-          var raw = (ta.value || '').trim();
-          if (!raw) { toast('先粘贴一段课文哦'); ta.focus(); return; }
-          if (raw.length > 2000) { toast('太长啦，先粘一小段（2000 字以内）'); return; }
-          Store.set('customText', raw);
-          var tip = host.querySelector('#txTaTip');
-          tip.textContent = '正在加拼音…';
-          function go(noPy) {
-            if (!host.isConnected) return;
-            var lines = splitSentences(raw).slice(0, 60).map(function (cn) {
-              return { cn: cn, py: noPy ? null : annotate(cn) };
-            });
-            open({
-              title: '我的课文',
-              meta: lines.length + ' 句 · ' + (noPy ? '无拼音' : '自动注音'),
-              lines: lines, from: 'mine'
-            });
-          }
-          loadPinyinPro().then(function () { go(false); }).catch(function () {
-            toast('拼音包没加载上，先按没有拼音朗读');
-            go(true);
-          });
+          genFrom((ta.value || '').trim(), host.querySelector('#txTaTip'));
         };
-        host.querySelector('#txClear').onclick = function () { ta.value = ''; Store.set('customText', ''); ta.focus(); };
+        host.querySelector('#txClear').onclick = function () { ta.value = ''; Store.set('customText', ''); renderList(); };
+      }
+      var mopen = host.querySelector('#txMineOpen');
+      if (mopen) {
+        mopen.onclick = function () {
+          sfx('tap');
+          genFrom((Store.get().customText || '').trim(), null);
+        };
       }
     }
 
