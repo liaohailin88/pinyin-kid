@@ -60,7 +60,7 @@ const URL = 'file:///F:/harness0916/pinyin-kid/index.html';
   R.voiceApi = await page.evaluate(() => !!window.VOICE && VOICE.available('female'));
   R.voiceIds = await page.evaluate(() => Object.keys(VOICE.list('female') || {}).length);
   await page.locator('#tcPlay').click();
-  await page.waitForTimeout(2600);
+  await page.waitForTimeout(4000);
   R.voicePlayed = await page.evaluate(() => performance.getEntriesByType('resource')
     .filter(e => /assets\/voice\/.*\.mp3$/.test(e.name)).length);
   R.voiceStats = await page.evaluate(() => VOICE.stats());

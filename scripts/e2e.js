@@ -199,11 +199,12 @@ const SHOT = 'F:\\harness0916\\pinyin-kid\\_shots';
   await page.locator('[data-bl="0"]').click();
   await page.waitForTimeout(500);
   await page.locator('#tcPlay').click();
-  await page.waitForTimeout(2600);
+  await page.waitForTimeout(4000);
   R.voicePlayed = await page.evaluate(() => ({
     files: performance.getEntriesByType('resource')
       .filter(e => /assets\/voice\/.*\.mp3$/.test(e.name)).length,
-    hot: document.querySelectorAll('.bl-item.hot').length
+    hot: document.querySelectorAll('.bl-item.hot').length,
+    stats: VOICE.stats()
   }));
   await shot('25-teach-blend');
   await page.evaluate(() => { location.hash = '#/home'; });

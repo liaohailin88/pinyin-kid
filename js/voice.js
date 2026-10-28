@@ -70,15 +70,20 @@
       }
       try {
         a.pause();
-        a.currentTime = 0;
+        // 还没拿到元数据时设 currentTime 会抛异常，别让这一点把整次播放判死
+        if (a.readyState > 0) a.currentTime = 0;
         a.playbackRate = opt.slow ? (opt.rate || 0.72) : 1;
-      } catch (e) { return fin('error'); }
+      } catch (e) { }
       a.onended = function () { fin('ok'); };
       a.onerror = function () { fin('error'); };
       playing = a;
       var p;
       try { p = a.play(); } catch (e) { return fin('error'); }
-      if (p && p.catch) p.catch(function () { fin('error'); });
+      if (p && p.catch) p.catch(function (e) {
+        // AbortError = 上一次播放被停掉/换片打断，不是真失败；交给 onended / 兜底计时器收尾
+        if (e && e.name === 'AbortError') return;
+        fin('error');
+      });
       // 兜底：真卡住了也要往下走（算作播过，别再用系统朗读重复一遍）
       setTimeout(function () {
         timedOut = true;
@@ -92,7 +97,13 @@
   }
 
   function preload(kind, ids) {
-    (ids || []).forEach(function (id) { if (has(kind, id)) el(kind, id).load(); });
+    (ids || []).forEach(function (id) {
+      if (!has(kind, id)) return;
+      var a = el(kind, id);
+      if (a.__warm) return;          // 只预热一次，重复 load() 会把正在下载的请求打断（ERR_ABORTED）
+      a.__warm = true;
+      try { a.load(); } catch (e) { }
+    });
   }
 
   /** 实际有内置语音吗（防止只拷了一半的仓库） */
