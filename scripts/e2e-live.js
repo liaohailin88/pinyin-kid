@@ -87,6 +87,27 @@ if (!URL_ARG) {
   R.mineLines = await page.locator('.tl-line').count();
   R.minePy = await page.evaluate(() => [...document.querySelectorAll('.tl-line .u .py')].map(n => n.textContent).filter(Boolean).join(' '));
 
+  // 声音角色：女声 / 男声 / 童声 换的是音调，检查真的传给了 TTS
+  await page.evaluate(() => { location.hash = '#/home'; });
+  await page.waitForTimeout(200);
+  await page.evaluate(() => { location.hash = '#/settings'; });
+  await page.waitForTimeout(500);
+  R.voiceKinds = await page.locator('[data-kind]').count();
+  R.voiceChips = await page.locator('.vchip').count();
+  await page.evaluate(() => {
+    window.__said = [];
+    try { window.speechSynthesis.speak = function (u) { window.__said.push({ p: u.pitch, r: u.rate }); }; } catch (e) { }
+  });
+  R.voice = {};
+  for (const k of ['female', 'male', 'child']) {
+    await page.locator('[data-kind="' + k + '"]').click();
+    await page.waitForTimeout(300);
+    R.voice[k] = await page.evaluate(() => {
+      var s = (window.__said || []).slice(-1)[0];
+      return { pitch: s ? +s.p.toFixed(2) : null, saved: (JSON.parse(localStorage.getItem('pinyin-planet-v1') || '{}').settings || {}).voiceKind };
+    });
+  }
+
   // 手机尺寸再跑一次首页
   const m = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await m.addInitScript(() => localStorage.setItem('pinyin-planet-welcomed', '1'));
