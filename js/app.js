@@ -564,6 +564,7 @@
   /* ---------------- 视图：首页 ---------------- */
   var TILES = [
     { id: 'chart', emo: '🗺️', name: '拼音地图', sub: '声母韵母全表·点一点就发音', cls: 'g2' },
+    { id: 'teach', emo: '🗣️', name: '拼音教读', sub: '声母·韵母·一个字怎么拼', cls: 'g12' },
     { id: 'initial', emo: '🅰️', name: '声母认读', sub: '听字音，找开头的声母', cls: 'g1' },
     { id: 'final', emo: '🔤', name: '韵母认读', sub: '听字音，找韵母', cls: 'g3' },
     { id: 'whole', emo: '🎯', name: '整体认读', sub: '16 个整体认读音节', cls: 'g4' },
@@ -1647,6 +1648,284 @@
     return host;
   }
 
+  /* ---------------- 视图：拼音教读（声母 / 韵母 / 拼一拼） ---------------- */
+  // 系统语音读不出单独的 b p m，但"呼读音"就是拿同音汉字读的：b 读「玻」= bo，p 读「坡」= po……
+  var INI_SAY = {
+    b: '玻', p: '坡', m: '摸', f: '佛', d: '得', t: '特', n: '讷', l: '勒',
+    g: '哥', k: '科', h: '喝', j: '基', q: '欺', x: '希',
+    zh: '知', ch: '吃', sh: '诗', r: '日', z: '资', c: '雌', s: '思', y: '衣', w: '屋'
+  };
+  var FIN_SAY = {
+    a: '啊', o: '喔', e: '鹅', i: '衣', u: '乌', 'ü': '迂',
+    ai: '哀', ei: '诶', ui: '威', ao: '熬', ou: '欧', iu: '优',
+    ie: '耶', 'üe': '约', er: '儿', an: '安', en: '恩', 'in': '因',
+    un: '温', 'ün': '晕', ang: '昂', eng: '鞥', ing: '英', ong: '嗡'
+  };
+  // 拼一拼：声母 + 韵母 → 音节 → 一个字（都挑一年级常用字，词语顺便认）
+  var BLEND = [
+    ['b', 'a', 1, '八', '八个'], ['p', 'a', 2, '爬', '爬山'], ['m', 'a', 1, '妈', '妈妈'],
+    ['f', 'a', 1, '发', '发芽'], ['d', 'a', 4, '大', '大小'], ['t', 'a', 1, '他', '他们'],
+    ['n', 'a', 2, '拿', '拿书'], ['l', 'a', 1, '拉', '拉手'], ['g', 'e', 1, '哥', '哥哥'],
+    ['k', 'e', 4, '课', '上课'], ['h', 'e', 2, '河', '小河'], ['j', 'i', 1, '鸡', '小鸡'],
+    ['q', 'i', 1, '七', '七个'], ['x', 'i', 1, '西', '西瓜'], ['zh', 'i', 3, '纸', '白纸'],
+    ['ch', 'i', 1, '吃', '吃饭'], ['sh', 'i', 2, '十', '十个'], ['r', 'i', 4, '日', '日子'],
+    ['z', 'i', 4, '字', '汉字'], ['c', 'i', 4, '刺', '刺猬'], ['s', 'i', 1, '丝', '丝瓜'],
+    ['b', 'ai', 2, '白', '白云'], ['d', 'ui', 4, '对', '不对'], ['l', 'iu', 4, '六', '六个'],
+    ['m', 'en', 2, '门', '大门'], ['x', 'in', 1, '新', '新年'], ['d', 'eng', 1, '灯', '电灯'],
+    ['m', 'ing', 2, '明', '明天'], ['h', 'ong', 2, '红', '红花'], ['q', 'ü', 4, '去', '回去']
+  ];
+  var CN_NUM = ['', '一', '二', '三', '四'];
+
+  function blendSyl(i) {
+    var b = BLEND[i];
+    return P.applyTone(P.build(b[0], b[1]), b[2]);
+  }
+
+  function viewTeach() {
+    var host = el('div', 'view');
+    var saved = (Store.get().teach) || {};
+    var state = { tab: saved.tab || 'ini', ini: saved.ini || 'b', fin: saved.fin || 'a', bl: saved.bl || 0 };
+    if (state.bl >= BLEND.length) state.bl = 0;
+
+    function save() { Store.set('teach', { tab: state.tab, ini: state.ini, fin: state.fin, bl: state.bl }); }
+
+    var HINTS = {
+      ini: '点一下听，再看口诀和口型，跟着念三遍。',
+      fin: '韵母读得响亮些、拖长一点。',
+      bl: '前音轻短后音重，两音相连猛一碰。'
+    };
+
+    var html = '<div class="sect-h" style="margin-top:0"><h2>拼音教读</h2><span>听一听 · 跟着念</span></div>';
+    html += '<div class="tabbar" id="tcTabs">' +
+      '<button class="tab' + (state.tab === 'ini' ? ' on' : '') + '" data-tab="ini">声母 23</button>' +
+      '<button class="tab' + (state.tab === 'fin' ? ' on' : '') + '" data-tab="fin">韵母 24</button>' +
+      '<button class="tab' + (state.tab === 'bl' ? ' on' : '') + '" data-tab="bl">拼一拼</button>' +
+      '</div>';
+    html += '<p class="tx-hint" id="tcHint">' + HINTS[state.tab] + '</p>';
+    html += '<div id="tcCard"></div>';
+    html += '<div id="tcPick"></div>';
+    host.innerHTML = html;
+
+    var playTimer = null;
+
+    /** 按顺序读：给每一步留一点时间，读得太快也不会挤在一起 */
+    function playSteps(steps, done) {
+      clearTimeout(playTimer);
+      var i = 0;
+      function go() {
+        if (i >= steps.length) { if (done) done(); return; }
+        var st = steps[i];
+        i++;
+        if (st.hot != null) hotAll(st.hot);
+        var t0 = Date.now();
+        var fired = false;
+        function next() {
+          if (fired) return;
+          fired = true;
+          var wait = Math.max(120, st.ms - (Date.now() - t0));
+          clearTimeout(playTimer);
+          playTimer = setTimeout(go, wait);
+        }
+        var fb = setTimeout(next, st.ms + 2500);
+        S.say(st.text, {
+          rate: st.rate,
+          onend: function () { clearTimeout(fb); next(); },
+          onerror: function () { clearTimeout(fb); next(); }
+        });
+      }
+      go();
+    }
+
+    function hotAll(n) {
+      var items = host.querySelectorAll('#blendRow .bl-item');
+      items.forEach(function (el2, k) { el2.classList.toggle('hot', k === n); });
+    }
+
+    /* ---- 候选格子 ---- */
+    function renderPick() {
+      host.querySelectorAll('#tcTabs .tab').forEach(function (b) {
+        b.classList.toggle('on', b.dataset.tab === state.tab);
+      });
+      host.querySelector('#tcHint').textContent = HINTS[state.tab];
+      var h = '<div class="tc-pills" id="tcGrid">';
+      if (state.tab === 'ini') {
+        P.INITIALS.forEach(function (x) {
+          h += '<button class="tc-pill' + (x.p === state.ini ? ' on' : '') + '" data-ini="' + x.p + '">' +
+            x.p + '<small>' + x.name + '</small></button>';
+        });
+      } else if (state.tab === 'fin') {
+        Finals.forEach(function (f) {
+          h += '<button class="tc-pill' + (f.p === state.fin ? ' on' : '') + '" data-fin="' + f.p + '">' +
+            f.p + '<small>' + (FIN_SAY[f.p] || '') + '</small></button>';
+        });
+      } else {
+        BLEND.forEach(function (b, i) {
+          h += '<button class="tc-pill' + (i === state.bl ? ' on' : '') + '" data-bl="' + i + '">' +
+            b[3] + '<small>' + blendSyl(i) + '</small></button>';
+        });
+      }
+      h += '</div>';
+      host.querySelector('#tcPick').innerHTML = h;
+
+      host.querySelectorAll('[data-ini]').forEach(function (b) {
+        b.onclick = function () { sfx('tap'); state.ini = b.dataset.ini; save(); renderPick(); renderCard(true); };
+      });
+      host.querySelectorAll('[data-fin]').forEach(function (b) {
+        b.onclick = function () { sfx('tap'); state.fin = b.dataset.fin; save(); renderPick(); renderCard(true); };
+      });
+      host.querySelectorAll('[data-bl]').forEach(function (b) {
+        b.onclick = function () { sfx('tap'); state.bl = +b.dataset.bl; save(); renderPick(); renderCard(true); };
+      });
+    }
+
+    /* ---- 教读卡片 ---- */
+    function exChips(list) {
+      if (!list || !list.length) return '';
+      return '<div class="tc-ex">例字：' + list.slice(0, 3).map(function (c) {
+        return '<button class="ex-chip" data-say="' + c.c + '">' + c.c + '<i>' + c.p + '</i></button>';
+      }).join('') + '</div>';
+    }
+
+    function navigatorHTML() {
+      return '<div class="btn-row">' +
+        '<button class="btn primary" id="tcPlay">🔊 教我读</button>' +
+        '<button class="btn blue" id="tcSlow">🐢 慢一点</button>' +
+        '<button class="btn ghost" id="tcPrev">⬅ 上一个</button>' +
+        '<button class="btn ghost" id="tcNext">下一个 ➡</button>' +
+        '</div>';
+    }
+
+    function cardIni(auto) {
+      var x = P.INITIALS.filter(function (v) { return v.p === state.ini; })[0] || P.INITIALS[0];
+      var say = INI_SAY[x.p] || '';
+      return '<div class="teach-card">' +
+        '<div class="tc-top"><div class="tc-big">' + x.p + '</div>' +
+        '<div class="tc-side"><span class="tc-tag">声母</span>' +
+        '<div class="tc-hw">呼读音：<b>' + x.name + '</b></div>' +
+        '<div class="tc-hw2">读作「' + say + '」 = ' + x.name + '</div></div></div>' +
+        '<div class="tc-rhyme">🎵 ' + x.rhyme + '</div>' +
+        '<div class="tc-tip">👄 ' + x.tip + '</div>' +
+        exChips(IDX.ini[x.p]) + navigatorHTML() + '</div>';
+    }
+
+    function cardFin(auto) {
+      var f = Finals.filter(function (v) { return v.p === state.fin; })[0] || Finals[0];
+      var say = FIN_SAY[f.p] || '';
+      var alone = f.alone && f.alone !== f.p ? '单独成音节时写成 <b>' + f.alone + '</b>' : '';
+      return '<div class="teach-card">' +
+        '<div class="tc-top"><div class="tc-big">' + f.p + '</div>' +
+        '<div class="tc-side"><span class="tc-tag">' + f.kind + '</span>' +
+        '<div class="tc-hw">读作「' + say + '」 <b>' + f.p + '</b></div>' +
+        (alone ? '<div class="tc-hw2">' + alone + '</div>' : '') + '</div></div>' +
+        '<div class="tc-rhyme">🎵 ' + f.rhyme + '</div>' +
+        '<div class="tc-tip">👄 ' + f.tip + '</div>' +
+        exChips(IDX.fin[f.p]) + navigatorHTML() + '</div>';
+    }
+
+    function cardBlend(auto) {
+      var b = BLEND[state.bl];
+      var syl = blendSyl(state.bl);
+      var tone = b[2];
+      var h = '<div class="teach-card">' +
+        '<div class="blend" id="blendRow">' +
+        '<div class="bl-item" data-s="0"><b>' + b[0] + '</b><span>声母</span></div>' +
+        '<div class="bl-op">＋</div>' +
+        '<div class="bl-item" data-s="1"><b>' + b[1] + '</b><span>韵母</span></div>' +
+        '<div class="bl-op">＝</div>' +
+        '<div class="bl-item" data-s="2"><b style="color:' + TONE_COLOR[tone] + '">' + syl + '</b><span>' + CN_NUM[tone] + '声</span></div>' +
+        '<div class="bl-op">→</div>' +
+        '<div class="bl-item" data-s="3"><b class="zi">' + b[3] + '</b><span>这个字</span></div>' +
+        '</div>' +
+        '<div class="tc-word">词语：<b>' + b[4] + '</b></div>' +
+        '<div class="tc-rhyme">🎵 ' + b[0] + ' — ' + b[1] + ' — ' + syl + '，' + b[0] + ' 和 ' + b[1] + ' 一碰，就读「' + b[3] + '」</div>' +
+        '<div class="btn-row">' +
+        '<button class="btn primary" id="tcPlay">▶ 拼一拼</button>' +
+        '<button class="btn blue" id="tcSlow">🔊 只读这个字</button>' +
+        '<button class="btn ghost" id="tcPrev">⬅ 上一个</button>' +
+        '<button class="btn ghost" id="tcNext">下一个 ➡</button>' +
+        '</div></div>';
+      return h;
+    }
+
+    function renderCard(auto) {
+      var box = host.querySelector('#tcCard');
+      box.innerHTML = state.tab === 'ini' ? cardIni(auto) : state.tab === 'fin' ? cardFin(auto) : cardBlend(auto);
+
+      box.querySelectorAll('[data-say]').forEach(function (b) {
+        b.onclick = function () { sfx('tap'); S.say(b.dataset.say, { rate: 0.5 }); };
+      });
+      host.querySelector('#tcPrev').onclick = function () { move(-1); };
+      host.querySelector('#tcNext').onclick = function () { move(1); };
+      host.querySelector('#tcPlay').onclick = function () { sfx('tap'); playNow(false); };
+      host.querySelector('#tcSlow').onclick = function () { sfx('tap'); playNow(true); };
+
+      if (auto) { playNow(false); ensureCard(); }
+    }
+
+    function ensureCard() {
+      var card = host.querySelector('.teach-card');
+      if (card && card.scrollIntoView) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+
+    function move(d) {
+      if (state.tab === 'ini') {
+        var i = Initials.indexOf(state.ini);
+        state.ini = Initials[(i + d + Initials.length) % Initials.length];
+      } else if (state.tab === 'fin') {
+        var j = Finals.map(function (f) { return f.p; }).indexOf(state.fin);
+        state.fin = Finals[(j + d + Finals.length) % Finals.length].p;
+      } else {
+        state.bl = (state.bl + d + BLEND.length) % BLEND.length;
+      }
+      save(); renderPick(); renderCard(true);
+    }
+
+    function playNow(slow) {
+      if (state.tab === 'ini') {
+        var a = INI_SAY[state.ini] || state.ini;
+        playSteps([
+          { text: a, rate: slow ? 0.4 : 0.5, ms: slow ? 1400 : 1050 },
+          { text: a, rate: slow ? 0.4 : 0.5, ms: slow ? 1400 : 1050 },
+          { text: a, rate: slow ? 0.4 : 0.5, ms: slow ? 1400 : 1050 }
+        ]);
+      } else if (state.tab === 'fin') {
+        var f = FIN_SAY[state.fin] || state.fin;
+        playSteps([
+          { text: f, rate: slow ? 0.4 : 0.5, ms: slow ? 1400 : 1050 },
+          { text: f, rate: slow ? 0.4 : 0.5, ms: slow ? 1400 : 1050 },
+          { text: f, rate: slow ? 0.4 : 0.5, ms: slow ? 1400 : 1050 }
+        ]);
+      } else {
+        var b = BLEND[state.bl];
+        var syl = blendSyl(state.bl);
+        if (slow) {
+          playSteps([
+            { text: b[3], rate: 0.45, ms: 1200, hot: 3 },
+            { text: b[4], rate: 0.5, ms: 1600, hot: 3 }
+          ], function () { hotAll(-1); });
+          return;
+        }
+        playSteps([
+          { text: INI_SAY[b[0]] || b[0], rate: 0.45, ms: 1000, hot: 0 },
+          { text: FIN_SAY[b[1]] || b[1], rate: 0.45, ms: 1000, hot: 1 },
+          { text: INI_SAY[b[0]] || b[0], rate: 0.5, ms: 700, hot: 0 },
+          { text: FIN_SAY[b[1]] || b[1], rate: 0.5, ms: 700, hot: 1 },
+          { text: b[3], rate: 0.45, ms: 1300, hot: 2 },
+          { text: b[3], rate: 0.5, ms: 1100, hot: 3 },
+          { text: b[4], rate: 0.55, ms: 1600, hot: 3 }
+        ], function () { hotAll(-1); });
+      }
+    }
+
+    host.querySelectorAll('#tcTabs .tab').forEach(function (b) {
+      b.onclick = function () { sfx('tap'); state.tab = b.dataset.tab; save(); renderPick(); renderCard(true); };
+    });
+
+    renderPick();
+    renderCard(false);
+    return host;
+  }
+
   /* ---------------- 路由 ---------------- */
   var routes = {
     '#/home': { title: '拼音星球', view: viewHome },
@@ -1662,6 +1941,7 @@
     '#/write': { title: '笔顺描红', view: viewWrite },
     '#/read': { title: '朗读小站', view: viewRead },
     '#/text': { title: '课文朗读', view: viewText },
+    '#/teach': { title: '拼音教读', view: viewTeach },
     '#/badges': { title: '我的徽章', view: viewBadges },
     '#/settings': { title: '设置', view: viewSettings }
   };

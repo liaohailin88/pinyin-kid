@@ -8,7 +8,7 @@ const VIEWS = [
   { name: 'tablet', w: 820, h: 1180 },
   { name: 'desktop', w: 1440, h: 900 }
 ];
-const ROUTES = ['#/home', '#/chart', '#/initial', '#/char', '#/write', '#/read',
+const ROUTES = ['#/home', '#/chart', '#/initial', '#/teach', '#/teach/fin', '#/teach/blend', '#/char', '#/write', '#/read',
   '#/text', '#/text/open', '#/text/lesson', '#/text/mine', '#/badges', '#/settings'];
 
 (async () => {
@@ -22,11 +22,22 @@ const ROUTES = ['#/home', '#/chart', '#/initial', '#/char', '#/write', '#/read',
     await page.waitForTimeout(300);
 
     for (const r of ROUTES) {
-      const real = r.indexOf('#/text/') === 0 ? '#/text' : r;
+      const real = (r.indexOf('#/text/') === 0 || r.indexOf('#/teach/') === 0)
+        ? (r.indexOf('#/teach/') === 0 ? '#/teach' : '#/text') : r;
       if (real !== r) { await page.evaluate(() => { location.hash = '#/home'; }); await page.waitForTimeout(200); }
       await page.evaluate(h => { location.hash = h; }, real);
       await page.waitForTimeout(r === '#/write' ? 2200 : 400);
-      if (r === '#/text/open') {
+      if (r === '#/teach/fin') {
+        await page.locator('.tab', { hasText: '韵母' }).click();
+        await page.waitForTimeout(300);
+        await page.locator('[data-fin="üe"]').click();
+        await page.waitForTimeout(400);
+      } else if (r === '#/teach/blend') {
+        await page.locator('.tab', { hasText: '拼一拼' }).click();
+        await page.waitForTimeout(300);
+        await page.locator('[data-bl="29"]').click();
+        await page.waitForTimeout(400);
+      } else if (r === '#/text/open') {
         await page.locator('.tx-card').first().click();
         await page.waitForTimeout(500);
       } else if (r === '#/text/lesson') {

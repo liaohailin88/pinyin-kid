@@ -206,6 +206,7 @@ button { cursor: pointer; border: none; background: none; color: inherit; }
 .tile.g9 { background: linear-gradient(150deg, #f783ac, #d6336c); }
 .tile.g10 { background: linear-gradient(150deg, #a9e34b, #74b816); color: #2b3a00; }
 .tile.g11 { background: linear-gradient(150deg, #22b8cf, #0b7285); color: #fff; }
+.tile.g12 { background: linear-gradient(150deg, #e599f7, #9c36b5); color: #fff; }
 
 .tile .badge-done {
   position: absolute; top: 12px; left: 12px;
@@ -669,6 +670,70 @@ button { cursor: pointer; border: none; background: none; color: inherit; }
   .big-card { width: 340px; }
   .tian { width: 300px; }
 }
+
+/* ---------------- 拼音教读 ---------------- */
+.tc-pills {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap: 7px;
+  margin: 2px 0 10px; padding: 10px; border-radius: var(--r-md); background: #f8fafc;
+}
+.tc-pill {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 46px; padding: 4px 6px; border-radius: 12px;
+  background: #fff; box-shadow: inset 0 0 0 2px #e8eef6;
+  font-size: 18px; font-weight: 900; color: var(--ink); line-height: 1.15;
+}
+.tc-pill small { font-size: 11.5px; font-weight: 800; color: var(--ink-2); }
+.tc-pill:active { transform: scale(.94); }
+.tc-pill.on { background: #e7f5ff; box-shadow: inset 0 0 0 3px var(--brand); color: var(--brand-deep); }
+
+.teach-card {
+  display: flex; flex-direction: column; gap: 10px;
+  width: 100%; max-width: 620px; margin: 4px auto 8px;
+  padding: 18px; border-radius: var(--r-lg); background: #fff;
+  box-shadow: var(--shadow-2); border: 3px solid #eef3f9;
+}
+.tc-top { display: flex; align-items: center; gap: 16px; }
+.tc-big {
+  flex: 0 0 auto; width: 96px; height: 96px; border-radius: var(--r-md);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 52px; font-weight: 900; color: var(--brand-deep);
+  background: linear-gradient(160deg, #e7f5ff, #d0ebff);
+}
+.tc-side { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.tc-tag {
+  align-self: flex-start; padding: 2px 10px; border-radius: 999px;
+  background: #e7f5ff; color: #1971c2; font-size: 12px; font-weight: 800;
+}
+.tc-hw { font-size: 15px; font-weight: 800; color: var(--ink); }
+.tc-hw b { font-size: 20px; color: var(--brand-deep); letter-spacing: .5px; }
+.tc-hw2 { font-size: 13px; font-weight: 700; color: var(--ink-2); line-height: 1.5; }
+.tc-rhyme {
+  font-size: 15px; font-weight: 800; color: #b25f00;
+  background: #fff9e6; border-radius: var(--r-sm); padding: 9px 12px; line-height: 1.5;
+}
+.tc-tip { font-size: 13.5px; font-weight: 700; color: var(--ink-2); line-height: 1.65; }
+.tc-ex { font-size: 13.5px; font-weight: 800; color: var(--ink-2); }
+.ex-chip {
+  display: inline-flex; align-items: baseline; gap: 4px; min-height: 44px;
+  margin: 6px 8px 0 0; padding: 0 14px; border-radius: 999px;
+  background: #f1f3f5; font-size: 18px; font-weight: 900; color: var(--ink);
+}
+.ex-chip:active { transform: scale(.94); }
+.ex-chip i { font-style: normal; font-size: 12px; font-weight: 700; color: var(--ink-2); }
+
+.blend { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
+.bl-item {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-width: 68px; padding: 10px 8px; border-radius: var(--r-md);
+  background: #f8fafc; box-shadow: inset 0 0 0 2px #e8eef6; transition: background .15s;
+}
+.bl-item b { font-size: 30px; line-height: 1.15; font-weight: 900; color: var(--ink); }
+.bl-item b.zi { color: var(--ink); }
+.bl-item span { font-size: 11.5px; font-weight: 800; color: var(--ink-2); }
+.bl-item.hot { background: #fff3bf; box-shadow: inset 0 0 0 3px var(--sun); }
+.bl-op { font-size: 20px; font-weight: 900; color: #adb5bd; }
+.tc-word { text-align: center; font-size: 15px; font-weight: 800; color: var(--ink-2); }
+.tc-word b { color: var(--ink); font-size: 17px; }
 
 /* ---------------- 设置 · 声音角色 ---------------- */
 .voice-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 0 0 12px; }

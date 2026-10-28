@@ -45,6 +45,17 @@ const URL = 'file:///F:/harness0916/pinyin-kid/index.html';
   await page.waitForTimeout(2500);
   R.mineLines = await page.locator('.tl-line').count();
   R.minePy = await page.evaluate(() => [...document.querySelectorAll('.tl-line .u .py')].map(n => n.textContent).filter(Boolean).join(' '));
+  // 拼音教读：三个 tab 都能出内容
+  await page.evaluate(() => { location.hash = '#/home'; });
+  await page.waitForTimeout(200);
+  await page.evaluate(() => { location.hash = '#/teach'; });
+  await page.waitForTimeout(600);
+  R.teachIni = await page.locator('[data-ini]').count();
+  R.teachBig = await page.locator('.tc-big').innerText();
+  await page.locator('.tab', { hasText: '拼一拼' }).click();
+  await page.waitForTimeout(400);
+  R.teachBlend = await page.locator('.bl-item').count();
+  R.teachWord = await page.locator('.tc-word').innerText();
   console.log(JSON.stringify(R, null, 2));
   console.log('--- ERRORS (' + errors.length + ') ---');
   errors.slice(0, 12).forEach(e => console.log(e));

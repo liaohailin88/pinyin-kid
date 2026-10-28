@@ -97,7 +97,55 @@ const URL = 'http://127.0.0.1:8765/index.html';
     await page.waitForTimeout(420);
   }
 
-  console.log(JSON.stringify({ kinds, cards, pinPage: { combos, splits }, problems: problems.slice(0, 20), problemCount: problems.length }, null, 2));
+  // 教读数据自检：呼读音全覆盖 + 拼一拼的拼音与生字库一致
+  async function clearModals() {
+    await page.evaluate(() => document.querySelectorAll('.modal-mask').forEach(n => n.remove()));
+  }
+  await clearModals();
+  await page.evaluate(() => { location.hash = '#/home'; });
+  await page.waitForTimeout(150);
+  await page.evaluate(() => { location.hash = '#/teach'; });
+  await page.waitForTimeout(600);
+  const iniSay = await page.evaluate(() => {
+    const out = {};
+    document.querySelectorAll('[data-ini]').forEach(b => {
+      const s = b.querySelector('small');
+      out[b.dataset.ini] = s ? s.textContent.trim() : '';
+    });
+    return out;
+  });
+  Object.keys(iniSay).forEach(k => { if (!iniSay[k]) problems.push('teach: 空呼读音 ini:' + k); });
+  await clearModals();
+  await page.locator('.tab', { hasText: '韵母' }).click();
+  await page.waitForTimeout(500);
+  const finSay = await page.evaluate(() => {
+    const out = {};
+    document.querySelectorAll('[data-fin]').forEach(b => {
+      const s = b.querySelector('small');
+      out[b.dataset.fin] = s ? s.textContent.trim() : '';
+    });
+    return out;
+  });
+  Object.keys(finSay).forEach(k => { if (!finSay[k]) problems.push('teach: 空呼读音 fin:' + k); });
+  await clearModals();
+  await page.locator('.tab', { hasText: '拼一拼' }).click();
+  await page.waitForTimeout(500);
+  const blendCheck = await page.evaluate(() => {
+    const db = window.CHAR_DB.chars;
+    return [...document.querySelectorAll('[data-bl]')].map(b => {
+      const zi = b.childNodes[0].textContent.trim();
+      const py = (b.querySelector('small') || {}).textContent || '';
+      const hit = db.find(x => x.c === zi);
+      return { zi, py, db: hit ? hit.p : '' };
+    });
+  });
+  blendCheck.forEach((x, i) => {
+    if (!x.py) problems.push('teach blend ' + i + ': 无拼音 ' + x.zi);
+    if (x.db && x.db !== x.py) problems.push('teach blend ' + i + ': ' + x.zi + ' 拼音不符 ' + x.py + ' vs 库 ' + x.db);
+  });
+  const teach = { ini: Object.keys(iniSay).length, fin: Object.keys(finSay).length, blend: blendCheck.length };
+
+  console.log(JSON.stringify({ kinds, cards, pinPage: { combos, splits }, teach, problems: problems.slice(0, 20), problemCount: problems.length }, null, 2));
   console.log('--- ERRORS (' + errors.length + ') ---');
   errors.slice(0, 10).forEach(e => console.log(e));
   await browser.close();

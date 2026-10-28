@@ -87,6 +87,30 @@ if (!URL_ARG) {
   R.mineLines = await page.locator('.tl-line').count();
   R.minePy = await page.evaluate(() => [...document.querySelectorAll('.tl-line .u .py')].map(n => n.textContent).filter(Boolean).join(' '));
 
+  // 拼音教读：声母 23 / 韵母 24 / 拼一拼 30
+  await page.evaluate(() => { location.hash = '#/home'; });
+  await page.waitForTimeout(200);
+  await page.locator('.tile', { hasText: '拼音教读' }).click();
+  await page.waitForTimeout(600);
+  R.teachIni = await page.locator('[data-ini]').count();
+  R.teachBig = await page.locator('.tc-big').innerText();
+  R.teachRhyme = await page.locator('.tc-rhyme').innerText();
+  await page.locator('.tab', { hasText: '韵母' }).click();
+  await page.waitForTimeout(400);
+  R.teachFin = await page.locator('[data-fin]').count();
+  await page.locator('.tab', { hasText: '拼一拼' }).click();
+  await page.waitForTimeout(400);
+  R.teachBlend = await page.locator('[data-bl]').count();
+  await page.locator('[data-bl="0"]').click();
+  await page.waitForTimeout(900);
+  R.blend = await page.evaluate(() => ({
+    parts: [...document.querySelectorAll('.bl-item b')].map(n => n.textContent),
+    word: document.querySelector('.tc-word').innerText,
+    hot: document.querySelectorAll('.bl-item.hot').length
+  }));
+  await page.evaluate(() => { location.hash = '#/home'; });
+  await page.waitForTimeout(200);
+
   // 声音角色：女声 / 男声 / 童声 换的是音调，检查真的传给了 TTS
   await page.evaluate(() => { location.hash = '#/home'; });
   await page.waitForTimeout(200);

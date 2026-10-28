@@ -147,6 +147,55 @@ const SHOT = 'F:\\harness0916\\pinyin-kid\\_shots';
   R.mineUnits = await page.locator('.tl-line .u').count();
   await shot('18-text-mine');
 
+  // ---- 拼音教读 ----
+  await page.evaluate(() => { location.hash = '#/teach'; });
+  await page.waitForTimeout(600);
+  R.teachTabs = await page.locator('#tcTabs .tab').count();
+  R.teachIniChips = await page.locator('[data-ini]').count();
+  R.teachBig = await page.locator('.tc-big').innerText();
+  R.teachRhyme = await page.locator('.tc-rhyme').innerText();
+  R.teachTag = await page.locator('.tc-tag').innerText();
+  R.teachEx = await page.locator('.ex-chip').count();
+  await shot('23-teach-initial');
+  await page.locator('[data-ini="m"]').click();
+  await page.waitForTimeout(500);
+  R.teachIniM = await page.locator('.tc-big').innerText();
+  await page.locator('#tcNext').click();
+  await page.waitForTimeout(400);
+  R.teachNext = await page.locator('.tc-big').innerText();
+  // 韵母
+  await page.locator('.tab', { hasText: '韵母' }).click();
+  await page.waitForTimeout(600);
+  R.teachFinChips = await page.locator('[data-fin]').count();
+  await page.locator('[data-fin="üe"]').click();
+  await page.waitForTimeout(500);
+  R.teachFinBig = await page.locator('.tc-big').innerText();
+  R.teachFinSay = await page.locator('.tc-hw').innerText();
+  await shot('24-teach-final');
+  // 拼一拼
+  await page.locator('.tab', { hasText: '拼一拼' }).click();
+  await page.waitForTimeout(600);
+  R.teachBlChips = await page.locator('[data-bl]').count();
+  R.teachBlItems = await page.locator('.bl-item').count();
+  R.blendFirst = await page.evaluate(() => ({
+    parts: [...document.querySelectorAll('.bl-item b')].map(n => n.textContent),
+    word: (document.querySelector('.tc-word') || {}).innerText,
+    chip: (document.querySelector('[data-bl] small') || {}).textContent
+  }));
+  await page.locator('[data-bl="29"]').click();   // q + ü → 去
+  await page.waitForTimeout(800);
+  R.blendQu = await page.evaluate(() => ({
+    parts: [...document.querySelectorAll('.bl-item b')].map(n => n.textContent),
+    hot: document.querySelectorAll('.bl-item.hot').length
+  }));
+  R.blendAll = await page.evaluate(() => [...document.querySelectorAll('[data-bl]')].map(b => ({
+    zi: b.textContent.replace(/\s.*$/, ''),
+    py: b.querySelector('small').textContent
+  })));
+  await shot('25-teach-blend');
+  await page.evaluate(() => { location.hash = '#/home'; });
+  await page.waitForTimeout(300);
+
   // ---- 设置 / 徽章 ----
   await page.evaluate(() => { location.hash = '#/settings'; });
   await page.waitForTimeout(500);
