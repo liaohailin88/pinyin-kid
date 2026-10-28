@@ -68,6 +68,25 @@ if (!URL_ARG) {
   R.strokeInfo = await page.locator('#strokeInfo').innerText().catch(() => '');
   R.bulkLoaded = await page.evaluate(() => !!(window.HANZI_STROKES && Object.keys(window.HANZI_STROKES).length > 600));
 
+  // 课文朗读：data/texts.js（古诗注音）+ assets/pinyin-pro.min.js（自动注音，用到才加载）
+  await page.evaluate(() => { location.hash = '#/home'; });
+  await page.waitForTimeout(200);
+  await page.evaluate(() => { location.hash = '#/text'; });
+  await page.waitForTimeout(600);
+  R.textCards = await page.locator('.tx-card').count();
+  await page.locator('.tx-card').first().click();
+  await page.waitForTimeout(400);
+  R.textLines = await page.locator('.tl-line').count();
+  await page.locator('#txBack').click();
+  await page.waitForTimeout(300);
+  await page.locator('.tab', { hasText: '我的课文' }).click();
+  await page.waitForTimeout(200);
+  await page.locator('#txTa').fill('春眠不觉晓，处处闻啼鸟。');
+  await page.locator('#txGen').click();
+  await page.waitForTimeout(5000);   // 首次要下载 318 KB 的 pinyin-pro
+  R.mineLines = await page.locator('.tl-line').count();
+  R.minePy = await page.evaluate(() => [...document.querySelectorAll('.tl-line .u .py')].map(n => n.textContent).filter(Boolean).join(' '));
+
   // 手机尺寸再跑一次首页
   const m = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await m.addInitScript(() => localStorage.setItem('pinyin-planet-welcomed', '1'));
