@@ -2,7 +2,7 @@
 const { chromium } = require(process.env.TEMP + '/e2e/node_modules/playwright-core');
 const fs = require('fs');
 
-const URL = 'http://127.0.0.1:8765/index.html';
+const URL = process.env.E2E_URL || 'http://127.0.0.1:8765/index.html';
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const SHOT = 'F:\\harness0916\\pinyin-kid\\_shots';
 

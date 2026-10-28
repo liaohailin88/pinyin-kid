@@ -12,7 +12,18 @@
 
 ## 一、怎么打开
 
-### 方式 1：直接双击（最简单）
+### 方式 0：直接用网址（已部署，最方便）
+
+**https://liaohailin88.github.io/pinyin-kid/**
+
+手机、平板、电脑都不需要装任何东西，浏览器打开就能用；可以把网址在手机上「添加到主屏幕」，
+图标点开就是全屏，像个 App。进过网之后浏览器会缓存资源，弱网也能打开。
+
+> 托管在 GitHub Pages（仓库 `liaohailin88/pinyin-kid`，`main` 分支根目录）。
+> 想更新线上内容：在本地改完 `git add -A; git commit -m "..."; git push`，
+> GitHub 会在一两分钟内自动重新发布，网址不变。
+
+### 方式 1：直接双击（不用网络）
 
 双击 `index.html`，用 **Edge / Chrome** 打开即可。
 
@@ -85,6 +96,8 @@ pinyin-kid/
     ├── serve.ps1           局域网服务器（HttpListener，无依赖）
     ├── e2e.js              端到端冒烟测试（Playwright + Edge）
     ├── e2e-file.js         `file://` 直开测试
+    ├── e2e-live.js         线上地址验收（`node scripts/e2e-live.js <url>`）
+    ├── poll-pages.ps1      等 GitHub Pages 生效后自动跑一次线上验收
     ├── audit.js            布局审计（3 种屏幕 × 8 个页面：横向溢出 / 点击区域 <40px / 字号 <11px）
     └── probe.js            出题器不变量检查（连跑 150 题，验证无空选项 / 答案不在选项里 / 答案泄露）
 ```
@@ -173,10 +186,14 @@ node scripts\e2e.js        # 端到端：10 个入口 + 答对一遍 + 笔顺 + 
 node scripts\e2e-file.js   # 双击打开（file://）是否正常
 node scripts\audit.js      # 390/820/1440 三种宽度 × 8 个页面，查溢出和过小点击区
 node scripts\probe.js      # 连跑 150 题，查空选项 / 答案不在选项里 / 答案泄露
+
+# 验收线上地址（也可以在本地服务器上跑：$env:E2E_URL='http://127.0.0.1:8000/'）
+$env:E2E_URL='https://liaohailin88.github.io/pinyin-kid/'; node scripts\e2e.js
+node scripts\e2e-live.js https://liaohailin88.github.io/pinyin-kid/
 ```
 
 需要 `playwright-core` 和本机 Edge（`%TEMP%\e2e\node_modules\playwright-core`）。
-四个脚本都要求**控制台 0 报错**才算通过。
+所有脚本都要求**控制台 0 报错**才算通过。
 
 ---
 
