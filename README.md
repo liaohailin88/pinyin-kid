@@ -77,9 +77,38 @@ http://192.168.x.x:8000        ← 平板 / 手机在同一 WiFi 下输入这个
 | 韵母 24 | 教材那 24 个（6 单韵母 + 8 复韵母 + 1 特殊 `er` + 5 前鼻 + 4 后鼻） | 同上，另外标出"单独成音节时怎么写"（如 `üe` → `yue`） |
 | 拼一拼 30 | 30 个一年级常用字 | 演示 `b + a → bā → 八 → 八个`：先读声母（玻），再读韵母（啊），再连起来是这个字，最后读词语，四个格子依次亮起来 |
 
-同样是**用呼读音的汉字喂给 TTS**：系统读不出单独的 `b`，但读「玻」就是 b 的音。
+这一页**不用设备自带的朗读**，用的是随程序打包的 107 段录音（`assets/voice/`）：
+声音来自微软的神经网络语音，**离线可用，手机 / 平板 / 电脑听到的完全一样**，
+不会出现"这台电脑一个口音、那台平板另一个口音"。
+
+为什么必须有录音：系统读不出单独的 `b`，喂「b」它会念成英文 "bee"。所以按小学的做法
+**用呼读音的汉字去读**（b 读「玻」＝bo，eng 读「鞥」）——这一套汉字和录音是提前生成好的。
 口诀 / 要领来自 `js/pinyin.js` 里的 `INITIALS`、`FINALS`；拼一拼的 30 组在
 `js/app.js` 的 `BLEND` 里，`scripts/probe.js` 会核对每条的拼音与生字库是否一致。
+
+### 内置语音是怎么生成的
+
+`scripts/gen_voice.py` 用 [edge-tts](https://github.com/rany2/edge-tts) 把 107 条内容 ×
+3 个音色 = 321 个 MP3 一次性生成好，顺手做了**去掉首尾静音 + 音量归一 + 32kbps 单声道**，
+总共只有 1.1 MB，整套网站一起拷走也不心疼：
+
+```powershell
+pip install edge-tts miniaudio lameenc
+$env:HTTPS_PROXY='http://127.0.0.1:7890'    # 大陆网络需要
+python scripts/gen_voice.py                 # 只补缺失的
+python scripts/gen_voice.py --force         # 全部重做
+python scripts/check_voice.py               # 检查有没有读歪的（见下）
+```
+
+| 音色 | 微软语音 | 语速 |
+|---|---|---|
+| 👩 女声 | `zh-CN-XiaoxiaoNeural`（晓晓） | `-6%` |
+| 👨 男声 | `zh-CN-YunyangNeural`（云扬，主播腔） | `-18%` |
+| 🧒 童声 | `zh-CN-YunxiaNeural`（云夏，少年音） | `-10%` |
+
+`check_voice.py` 是个**不用联网、不用语音识别**的自检：同一个字三个音色读出来应该差不多长，
+某一条比别的音色长/短一大截，就说明它没按字读（被念成字母、或者拆成几个音）。
+云希 `zh-CN-YunxiNeural` 就是因为把 **鹅 / 恩 / 鞥** 念成了两秒多，被这个检查抓出来换掉的。
 
 ### 声音角色（女声 / 男声 / 童声）
 
@@ -87,13 +116,17 @@ http://192.168.x.x:8000        ← 平板 / 手机在同一 WiFi 下输入这个
 
 | 选项 | 听感 | 实际用的是 |
 |---|---|---|
-| 👩 女声 | 温柔的老师（默认） | `Huihui` / `Xiaoxiao` 这类女声 |
-| 👨 男声 | 低沉的爸爸声 | `Kangkang` / `Yunxi` 这类男声；没有男声时用女声压低音调模拟 |
-| 🧒 童声 | 尖细的小伙伴 | 系统里基本没有真童声，**把女声音调调高约 1.4 倍、语速乘 0.92** 模拟出来 |
+| 👩 女声 | 温柔的老师（默认） | 教读：晓晓；其它页面：`Huihui` / `Xiaoxiao` 这类女声 |
+| 👨 男声 | 低沉的爸爸声 | 教读：云扬；其它页面：`Kangkang` / `Yunyang` 这类男声，没有男声时用女声压低音调模拟 |
+| 🧒 童声 | 尖细的小伙伴 | 教读：云夏；其它页面系统里基本没有真童声，**把女声音调调高约 1.4 倍、语速乘 0.95** 模拟出来 |
 
 下面「发音人」会列出这台设备上**所有中文语音**，可以手动指定（比如 Edge 的
-`Xiaoxiao Online (Natural)` 听起来最自然）；选「自动」就按音色自己挑，**本地语音优先**（离线也能读）。
+`Xiaoxiao Online (Natural)` 听起来最自然）；选「自动」就按音色自己挑，**有网时优先用
+`Natural` / `Online` 的神经语音**（好听得多），没网或用不上时退回本地发音人；
+万一线上的语音一直不开口，1.6 秒后会自动改用本地发音人重读一遍。
 当前实际在用谁、是不是模拟的，都会写在同一行小字里。设置存在本机，换设备要重新选。
+
+> 📌 「拼音教读」不受上面这些影响——它有自己的录音，换音色就是换整套录音。
 
 ### 星星和徽章
 
@@ -116,6 +149,7 @@ pinyin-kid/
 │   ├── pinyin.js           拼音引擎：声母/韵母/音节表、标调规则、jqx+y/w 拼写规则、易混对
 │   ├── store.js            本地进度（localStorage 键 pinyin-planet-v1）
 │   ├── speech.js           TTS（Web Speech）+ 音效（Web Audio 合成）+ 跟读识别
+│   ├── voice.js            内置语音播放（assets/voice 里的 MP3，教读用）
 │   └── app.js              路由、11 个视图、出题引擎、答题/星级/徽章逻辑
 ├── data/
 │   ├── characters.js       生字库 647 字 / 17 单元 / 33 短句
@@ -125,10 +159,13 @@ pinyin-kid/
 │   ├── hanzi-writer.min.js 笔顺动画库 v3.7.3（本地化，无 CDN）
 │   ├── pinyin-pro.min.js   自动注音库 pinyin-pro v3.29.5（MIT，只在「我的课文」用到时懒加载）
 │   ├── pinyin-pro.LICENSE.txt
+│   ├── voice/              内置语音（321 个 MP3 + manifest.js，共 1.1 MB）
 │   └── hanzi/{字}.json     647 个字的笔画数据（每字一个文件，HTTP 下按需读取）
 └── scripts/
     ├── gen_chars.py        重新生成 characters.js + hanzi-all.js + hanzi/*.json
     ├── gen_texts.js        重新生成 texts.js（古诗 + 课本短句逐字注音）
+    ├── gen_voice.py        重新生成内置语音（edge-tts，需联网）
+    ├── check_voice.py      内置语音自检（三个音色互相对比时长，找读歪的）
     ├── serve.ps1           局域网服务器（HttpListener，无依赖）
     ├── e2e.js              端到端冒烟测试（Playwright + Edge）
     ├── e2e-file.js         `file://` 直开测试
@@ -252,6 +289,7 @@ node scripts\e2e.js        # 端到端：12 个入口 + 答对一遍 + 笔顺 + 
 node scripts\e2e-file.js   # 双击打开（file://）是否正常（含课文自动注音）
 node scripts\audit.js      # 390/820/1440 三种宽度 × 15 个页面/状态，查溢出和过小点击区
 node scripts\probe.js      # 连跑 150 题，查空选项 / 答案不在选项里 / 答案泄露；再核对教读的呼读音与拼读数据
+python scripts\check_voice.py   # 内置语音自检（三个音色互相比较时长，0 可疑才算过）
 
 # 验收线上地址（也可以在本地服务器上跑：$env:E2E_URL='http://127.0.0.1:8000/'）
 $env:E2E_URL='https://liaohailin88.github.io/pinyin-kid/'; node scripts\e2e.js
@@ -265,12 +303,13 @@ node scripts\e2e-live.js https://liaohailin88.github.io/pinyin-kid/
 
 ## 七、已知限制
 
-1. **发音依赖系统的中文语音包**。Windows 自带"Microsoft Huihui / Yaoyao / Xiaoxiao"，
+1. **大部分页面的发音依赖系统的中文语音包**。Windows 自带"Microsoft Huihui / Yaoyao / Xiaoxiao"，
    Edge 里音质更好；某些精简版系统没有中文语音，此时音频类练习会没有声音
    （设置页有「语音检查」，会明确告诉你有没有找到中文语音）。
+   **例外是「拼音教读」**——它用的是随程序打包的录音，不依赖系统语音包，离线也有声音。
 2. **童声 / 男声是"调出来"的**：系统里通常只有女声，程序靠调整音调（和童声的语速）
    来模拟；部分在线神经语音会忽略音调参数，那时男女声听起来差别很小——换成设备上的本地语音
-   （名字里没有 `Online` 的）差别就明显了。
+   （名字里没有 `Online` 的）差别就明显了。（教读页不用这套模拟，三个音色都是真人的神经网络录音。）
 3. **跟读打分**用的是浏览器的语音识别（Chrome / Edge），需要联网、需要 https 或 localhost，
    识别不准时只当参考，不要当考试。
 4. 拼音的**四声**由 TTS 读整字来体现，个别字的多音 / 轻声 TTS 可能读得不够准。
@@ -282,4 +321,7 @@ node scripts\e2e-live.js https://liaohailin88.github.io/pinyin-kid/
 8. 没有中文语音包时，「整篇连读」不会出声，但会像卡拉 OK 一样逐字高亮走一遍（进度照样算）。
    想看有没有语音：右上角「⚙️设置 → 语音检查」。
 9. 「拼音教读」读的是**呼读音**（b 读"玻"= bo、n 读"讷"、eng 读"鞥"），这是小学课堂上教的读法；
-   个别语音包对 `n`、`eng`、`ong` 这几个呼读音会读得有点生硬，换一个发音人通常就好。
+   有几个只能"取最接近的字"来读：`ong` 用「嗡」、`ang` 用「昂」，听起来会比标准呼读音圆一点；
+   单个声母 / 韵母没有声调，录音里是平读（一声的感觉），这是正常的。
+   内置录音是**按字面生成的，没有用语音识别逐条复核**——`scripts/check_voice.py` 只能
+   保证三个音色之间互相对得上（谁读得离谱会被抓出来），听感上的细节仍建议家长先自己听一遍。

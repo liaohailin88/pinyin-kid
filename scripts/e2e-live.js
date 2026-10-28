@@ -108,6 +108,14 @@ if (!URL_ARG) {
     word: document.querySelector('.tc-word').innerText,
     hot: document.querySelectorAll('.bl-item.hot').length
   }));
+  // 内置语音：文件在线上也要能拿到（手机上换音色、断网都能读）
+  R.voiceApi = await page.evaluate(() => !!window.VOICE && VOICE.available('female'));
+  R.voiceIds = await page.evaluate(() => Object.keys(VOICE.list('female') || {}).length);
+  await page.locator('#tcPlay').click();
+  await page.waitForTimeout(2600);
+  R.voicePlayed = await page.evaluate(() => performance.getEntriesByType('resource')
+    .filter(e => /assets\/voice\/.*\.mp3$/.test(e.name)).length);
+  R.voiceStats = await page.evaluate(() => VOICE.stats());
   await page.evaluate(() => { location.hash = '#/home'; });
   await page.waitForTimeout(200);
 

@@ -192,6 +192,19 @@ const SHOT = 'F:\\harness0916\\pinyin-kid\\_shots';
     zi: b.textContent.replace(/\s.*$/, ''),
     py: b.querySelector('small').textContent
   })));
+  // 内置语音：清单、预加载、点"教我读"时真的播了 MP3
+  R.voiceApi = await page.evaluate(() => !!window.VOICE && VOICE.available('female'));
+  R.voiceIds = await page.evaluate(() => Object.keys(VOICE.list('female') || {}).length);
+  R.voiceNote = await page.locator('.tc-note').innerText();
+  await page.locator('[data-bl="0"]').click();
+  await page.waitForTimeout(500);
+  await page.locator('#tcPlay').click();
+  await page.waitForTimeout(2600);
+  R.voicePlayed = await page.evaluate(() => ({
+    files: performance.getEntriesByType('resource')
+      .filter(e => /assets\/voice\/.*\.mp3$/.test(e.name)).length,
+    hot: document.querySelectorAll('.bl-item.hot').length
+  }));
   await shot('25-teach-blend');
   await page.evaluate(() => { location.hash = '#/home'; });
   await page.waitForTimeout(300);

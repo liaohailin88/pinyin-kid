@@ -1,3 +1,5 @@
 # 本地测试产物
 _shots/
 *.log
+__pycache__/
+*.pyc

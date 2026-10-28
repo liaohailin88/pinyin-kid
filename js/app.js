@@ -1550,6 +1550,7 @@
         '<span class="vb-s">' + k.sub + '</span></button>';
     }).join('') + '</div>';
     html += '<p class="voice-info" id="vInfo">' + voiceLine() + '</p>';
+    html += '<p class="voice-info">📚 拼音教读（声母 / 韵母 / 拼一拼）用的是内置语音，换音色会一起换，平板和手机听起来一模一样；其它练习用这台设备的朗读。</p>';
     if (vList.length > 1) {
       html += '<div class="voice-chips" id="vChips">' +
         '<button class="vchip' + (curName ? '' : ' on') + '" data-vi="-1">自动</button>' +
@@ -1588,7 +1589,7 @@
       cb.onchange = function () {
         var id = cb.id.replace('sw_', '');
         Store.setting(id, cb.checked);
-        if (id === 'voice') S.setEnabled(cb.checked);
+        if (id === 'voice') { S.setEnabled(cb.checked); if (global.VOICE) VOICE.setEnabled(cb.checked); }
         else if (id === 'sfx') { /* 立即生效 */ }
         // 重绘
         navigate('#/settings');
@@ -1632,7 +1633,19 @@
       };
     });
     host.querySelector('#testVoice').onclick = function () {
-      S.say('小朋友你好，我们一起来学拼音吧', { rate: Store.setting('rate') });
+      var k = S.kind();
+      var seq = ['ini-b', 'fin-a', 'bl-0', 'bw-0'];
+      if (global.VOICE && VOICE.has(k, seq[0])) {
+        (function next(i) {
+          if (i >= seq.length) return;
+          VOICE.play(k, seq[i]).then(function (r) {
+            if (r !== 'ok') { S.say('小朋友你好，我们一起来学拼音吧', { rate: Store.setting('rate') }); return; }
+            setTimeout(function () { next(i + 1); }, 220);
+          });
+        })(0);
+      } else {
+        S.say('小朋友你好，我们一起来学拼音吧', { rate: Store.setting('rate') });
+      }
     };
     host.querySelector('#resetAll').onclick = function () {
       modal({
@@ -1708,32 +1721,58 @@
 
     var playTimer = null;
 
-    /** 按顺序读：给每一步留一点时间，读得太快也不会挤在一起 */
-    function playSteps(steps, done) {
+    /** 内置语音的 id：声母 b → ini-b，韵母 üe → fin-ve（文件名不能带 ü） */
+    function clipId(group, p) { return group + '-' + String(p).replace('ü', 'v'); }
+
+    /**
+     * 按顺序播放：每一步要么用内置语音（准、音色统一），要么退回系统朗读
+     * step = { clip, text, gap, hot, rate }
+     */
+    function playSteps(steps, slow, done) {
       clearTimeout(playTimer);
+      var kind = S.kind();
       var i = 0;
       function go() {
         if (i >= steps.length) { if (done) done(); return; }
         var st = steps[i];
         i++;
         if (st.hot != null) hotAll(st.hot);
-        var t0 = Date.now();
         var fired = false;
         function next() {
           if (fired) return;
           fired = true;
-          var wait = Math.max(120, st.ms - (Date.now() - t0));
           clearTimeout(playTimer);
-          playTimer = setTimeout(go, wait);
+          playTimer = setTimeout(go, st.gap == null ? 420 : st.gap);
         }
-        var fb = setTimeout(next, st.ms + 2500);
-        S.say(st.text, {
-          rate: st.rate,
-          onend: function () { clearTimeout(fb); next(); },
-          onerror: function () { clearTimeout(fb); next(); }
-        });
+        var fb = setTimeout(next, 7000);
+        function fallback() {
+          clearTimeout(fb);
+          S.say(st.text, {
+            rate: st.rate || (slow ? 0.4 : 0.5),
+            onend: next,
+            onerror: next
+          });
+        }
+        if (st.clip && global.VOICE && VOICE.has(kind, st.clip)) {
+          VOICE.play(kind, st.clip, { slow: slow }).then(function (r) {
+            if (r === 'ok') { clearTimeout(fb); next(); }
+            else fallback();
+          });
+        } else {
+          fallback();
+        }
       }
       go();
+    }
+
+    function preloadClips() {
+      if (!global.VOICE) return;
+      var kind = S.kind();
+      var ids = [];
+      if (state.tab === 'ini') P.INITIALS.forEach(function (x) { ids.push(clipId('ini', x.p)); });
+      else if (state.tab === 'fin') Finals.forEach(function (f) { ids.push(clipId('fin', f.p)); });
+      else BLEND.forEach(function (b, i) { ids.push('bl-' + i); ids.push('bw-' + i); });
+      VOICE.preload(kind, ids);
     }
 
     function hotAll(n) {
@@ -1786,13 +1825,15 @@
       }).join('') + '</div>';
     }
 
+    var TEACH_NOTE = '<div class="tc-note">💡 这里是内置语音：读得准，手机、平板、电脑听起来都一样。想听更慢的就点「慢一点」。</div>';
+
     function navigatorHTML() {
       return '<div class="btn-row">' +
         '<button class="btn primary" id="tcPlay">🔊 教我读</button>' +
         '<button class="btn blue" id="tcSlow">🐢 慢一点</button>' +
         '<button class="btn ghost" id="tcPrev">⬅ 上一个</button>' +
         '<button class="btn ghost" id="tcNext">下一个 ➡</button>' +
-        '</div>';
+        '</div>' + TEACH_NOTE;
     }
 
     function cardIni(auto) {
@@ -1843,7 +1884,7 @@
         '<button class="btn blue" id="tcSlow">🔊 只读这个字</button>' +
         '<button class="btn ghost" id="tcPrev">⬅ 上一个</button>' +
         '<button class="btn ghost" id="tcNext">下一个 ➡</button>' +
-        '</div></div>';
+        '</div>' + TEACH_NOTE + '</div>';
       return h;
     }
 
@@ -1859,6 +1900,7 @@
       host.querySelector('#tcPlay').onclick = function () { sfx('tap'); playNow(false); };
       host.querySelector('#tcSlow').onclick = function () { sfx('tap'); playNow(true); };
 
+      preloadClips();
       if (auto) { playNow(false); ensureCard(); }
     }
 
@@ -1881,39 +1923,48 @@
     }
 
     function playNow(slow) {
+      if (global.VOICE) VOICE.stop();
+      S.stop();
       if (state.tab === 'ini') {
         var a = INI_SAY[state.ini] || state.ini;
+        var ci = clipId('ini', state.ini);
         playSteps([
-          { text: a, rate: slow ? 0.4 : 0.5, ms: slow ? 1400 : 1050 },
-          { text: a, rate: slow ? 0.4 : 0.5, ms: slow ? 1400 : 1050 },
-          { text: a, rate: slow ? 0.4 : 0.5, ms: slow ? 1400 : 1050 }
-        ]);
+          { clip: ci, text: a, gap: 520 },
+          { clip: ci, text: a, gap: 520 },
+          { clip: ci, text: a }
+        ], slow);
       } else if (state.tab === 'fin') {
         var f = FIN_SAY[state.fin] || state.fin;
+        var cf = clipId('fin', state.fin);
         playSteps([
-          { text: f, rate: slow ? 0.4 : 0.5, ms: slow ? 1400 : 1050 },
-          { text: f, rate: slow ? 0.4 : 0.5, ms: slow ? 1400 : 1050 },
-          { text: f, rate: slow ? 0.4 : 0.5, ms: slow ? 1400 : 1050 }
-        ]);
+          { clip: cf, text: f, gap: 520 },
+          { clip: cf, text: f, gap: 520 },
+          { clip: cf, text: f }
+        ], slow);
       } else {
         var b = BLEND[state.bl];
-        var syl = blendSyl(state.bl);
+        var bl = 'bl-' + state.bl;
+        var bw = 'bw-' + state.bl;
+        var c1 = clipId('ini', b[0]);
+        var c2 = clipId('fin', b[1]);
+        var t1 = INI_SAY[b[0]] || b[0];
+        var t2 = FIN_SAY[b[1]] || b[1];
         if (slow) {
           playSteps([
-            { text: b[3], rate: 0.45, ms: 1200, hot: 3 },
-            { text: b[4], rate: 0.5, ms: 1600, hot: 3 }
-          ], function () { hotAll(-1); });
+            { clip: bl, text: b[3], gap: 520, hot: 3 },
+            { clip: bw, text: b[4], hot: 3 }
+          ], slow, function () { hotAll(-1); });
           return;
         }
         playSteps([
-          { text: INI_SAY[b[0]] || b[0], rate: 0.45, ms: 1000, hot: 0 },
-          { text: FIN_SAY[b[1]] || b[1], rate: 0.45, ms: 1000, hot: 1 },
-          { text: INI_SAY[b[0]] || b[0], rate: 0.5, ms: 700, hot: 0 },
-          { text: FIN_SAY[b[1]] || b[1], rate: 0.5, ms: 700, hot: 1 },
-          { text: b[3], rate: 0.45, ms: 1300, hot: 2 },
-          { text: b[3], rate: 0.5, ms: 1100, hot: 3 },
-          { text: b[4], rate: 0.55, ms: 1600, hot: 3 }
-        ], function () { hotAll(-1); });
+          { clip: c1, text: t1, gap: 300, hot: 0 },
+          { clip: c2, text: t2, gap: 620, hot: 1 },
+          { clip: c1, text: t1, gap: 220, hot: 0 },
+          { clip: c2, text: t2, gap: 700, hot: 1 },
+          { clip: bl, text: blendSyl(state.bl), gap: 700, hot: 2 },
+          { clip: bl, text: b[3], gap: 520, hot: 3 },
+          { clip: bw, text: b[4], hot: 3 }
+        ], slow, function () { hotAll(-1); });
       }
     }
 
@@ -2011,6 +2062,7 @@
     var st = Store.get();
     S.apply(st.settings || {});
     S.setEnabled(st.settings.voice !== false);
+    if (global.VOICE) VOICE.setEnabled(st.settings.voice !== false);
 
     global.addEventListener('hashchange', function () {
       var exact = global.location.hash;

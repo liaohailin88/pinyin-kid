@@ -56,6 +56,14 @@ const URL = 'file:///F:/harness0916/pinyin-kid/index.html';
   await page.waitForTimeout(400);
   R.teachBlend = await page.locator('.bl-item').count();
   R.teachWord = await page.locator('.tc-word').innerText();
+  // file:// 下也要能加载内置语音（直接双击 index.html 的用法）
+  R.voiceApi = await page.evaluate(() => !!window.VOICE && VOICE.available('female'));
+  R.voiceIds = await page.evaluate(() => Object.keys(VOICE.list('female') || {}).length);
+  await page.locator('#tcPlay').click();
+  await page.waitForTimeout(2600);
+  R.voicePlayed = await page.evaluate(() => performance.getEntriesByType('resource')
+    .filter(e => /assets\/voice\/.*\.mp3$/.test(e.name)).length);
+  R.voiceStats = await page.evaluate(() => VOICE.stats());
   console.log(JSON.stringify(R, null, 2));
   console.log('--- ERRORS (' + errors.length + ') ---');
   errors.slice(0, 12).forEach(e => console.log(e));

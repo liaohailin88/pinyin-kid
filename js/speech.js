@@ -16,8 +16,9 @@
   /* ---------- 音色：女声 / 男声 / 童声 ---------- */
   var kind = 'female';          // female | male | child
   var wantName = '';            // 手动指定的发音人（空 = 自动挑）
-  var KIND_PITCH = { female: 1.15, male: 0.8, child: 1.62 };
-  var KIND_RATE = { female: 1, male: 1, child: 0.92 };
+  // 系统里一般没有真正的童声，只能把女声调高一点；1.62 太尖（像卡通松鼠），1.42 自然些
+  var KIND_PITCH = { female: 1.15, male: 0.8, child: 1.42 };
+  var KIND_RATE = { female: 1, male: 1, child: 0.95 };
 
   var FEMALE_RE = /Huihui|Yaoyao|Xiaoxiao|Xiaoyi|Xiaohan|Xiaomo|Xiaoxuan|Xiaorui|Xiaoshuang|Yunxia|Yuning|Yunye|Yunmeng|Female|女/i;
   var MALE_RE = /Kangkang|Yunxi|Yunjian|Yunyang|Yunfeng|Yunhao|Yunze|Yunjie|Yunbo|Yunye-male|Male|男/i;
@@ -51,8 +52,12 @@
     var want = kind === 'male' ? 'male' : 'female';
     var pref = zh.filter(function (v) { return sexOf(v) === want; });
     if (!pref.length) pref = zh;
-    // 3) 本地优先（离线也能读）
-    zhVoice = pref.filter(function (v) { return v.localService; })[0] || pref[0];
+    // 3) 有网时优先"神经语音"（Natural/Online）：比老式的 Huihui 好听太多；
+    //    没网就退回本地发音人（离线也能读）
+    var nat = pref.filter(function (v) { return /Natural|Online|Neural/i.test(v.name); });
+    var local = pref.filter(function (v) { return v.localService; });
+    var online = !global.navigator || global.navigator.onLine !== false;
+    zhVoice = (online && nat[0]) || local[0] || nat[0] || pref[0];
   }
   if (synth) {
     pickVoice();
@@ -135,9 +140,14 @@
       if (!voices.length) pickVoice();
       try {
         if (opt.interrupt !== false) synth.cancel();
+        speakWith(zhVoice, false);
+      } catch (e) { if (opt.onend) opt.onend(); }
+
+      /** 在线语音有时一直不开口（断网 / 被浏览器拦），1.6 秒没动静就换本地的 */
+      function speakWith(voice, isRetry) {
         var u = new SpeechSynthesisUtterance(text);
         u.lang = 'zh-CN';
-        if (zhVoice) u.voice = zhVoice;
+        if (voice) u.voice = voice;
         // 音色靠 音调 体现（系统里通常没有童声，就把女声调高、调慢）
         var basePitch = opt.pitch != null ? opt.pitch : 1.15;
         var p = basePitch * (KIND_PITCH[kind] || 1.15) / 1.15;
@@ -148,8 +158,27 @@
         if (opt.onend) u.onend = opt.onend;
         if (opt.onerror) u.onerror = opt.onerror;
         if (opt.onboundary) u.onboundary = opt.onboundary;
+        if (!isRetry && voice && voice.localService === false) {
+          var started = false;
+          var wd = setTimeout(function () {
+            if (started) return;
+            var alt = localAlt(voice);
+            if (!alt) return;
+            try { synth.cancel(); } catch (e) { }
+            speakWith(alt, true);
+          }, 1600);
+          u.onstart = function () { started = true; clearTimeout(wd); };
+        }
         synth.speak(u);
-      } catch (e) { if (opt.onend) opt.onend(); }
+      }
+
+      /** 挑一个本地中文发音人（优先同性别），在线语音哑火时兜底 */
+      function localAlt(cur) {
+        var list = zhVoices().filter(function (v) { return v.localService && v !== cur; });
+        if (!list.length) return null;
+        var want = kind === 'male' ? 'male' : 'female';
+        return list.filter(function (v) { return sexOf(v) === want; })[0] || list[0];
+      }
     },
 
     /** 读一个音节：尽量用"字音"读准（拼音直接读会读成英文字母） */
