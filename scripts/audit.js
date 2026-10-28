@@ -8,7 +8,8 @@ const VIEWS = [
   { name: 'tablet', w: 820, h: 1180 },
   { name: 'desktop', w: 1440, h: 900 }
 ];
-const ROUTES = ['#/home', '#/chart', '#/initial', '#/char', '#/write', '#/read', '#/badges', '#/settings'];
+const ROUTES = ['#/home', '#/chart', '#/initial', '#/char', '#/write', '#/read',
+  '#/text', '#/text/open', '#/text/lesson', '#/text/mine', '#/badges', '#/settings'];
 
 (async () => {
   const browser = await chromium.launch({ executablePath: EDGE, headless: true, args: ['--no-sandbox'] });
@@ -21,8 +22,25 @@ const ROUTES = ['#/home', '#/chart', '#/initial', '#/char', '#/write', '#/read',
     await page.waitForTimeout(300);
 
     for (const r of ROUTES) {
-      await page.evaluate(h => { location.hash = h; }, r);
+      const real = r.indexOf('#/text/') === 0 ? '#/text' : r;
+      if (real !== r) { await page.evaluate(() => { location.hash = '#/home'; }); await page.waitForTimeout(200); }
+      await page.evaluate(h => { location.hash = h; }, real);
       await page.waitForTimeout(r === '#/write' ? 2200 : 400);
+      if (r === '#/text/open') {
+        await page.locator('.tx-card').first().click();
+        await page.waitForTimeout(500);
+      } else if (r === '#/text/lesson') {
+        await page.locator('.tab', { hasText: '课文句子' }).click();
+        await page.waitForTimeout(300);
+        await page.locator('.tx-sent').first().click();
+        await page.waitForTimeout(500);
+      } else if (r === '#/text/mine') {
+        await page.locator('.tab', { hasText: '我的课文' }).click();
+        await page.waitForTimeout(200);
+        await page.locator('#txTa').fill('天气凉了，树叶黄了。一片片叶子从树上落下来。');
+        await page.locator('#txGen').click();
+        await page.waitForTimeout(1800);
+      }
       const res = await page.evaluate(() => {
         const doc = document.documentElement;
         const overflowX = doc.scrollWidth - doc.clientWidth;

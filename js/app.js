@@ -99,6 +99,7 @@
     { id: 'pinyin-pro', emo: '🅰️', name: '拼音小达人', tip: '声母/韵母问答全对一轮' },
     { id: 'tone-master', emo: '🎵', name: '声调小侦探', tip: '声调题连对 10' },
     { id: 'read-10', emo: '📖', name: '朗读小百灵', tip: '朗读 10 句' },
+    { id: 'read-text', emo: '🎙️', name: '课文小喇叭', tip: '完整朗读 5 篇' },
     { id: 'write-10', emo: '✍️', name: '写字小书法家', tip: '描红 10 个字' },
     { id: 'char-50', emo: '🏮', name: '识字半百', tip: '掌握 50 个字' },
     { id: 'char-200', emo: '📚', name: '识字两百', tip: '掌握 200 个字' },
@@ -571,6 +572,7 @@
     { id: 'char', emo: '🏮', name: '认字卡', sub: '看字读拼音·按课选字', cls: 'g5' },
     { id: 'write', emo: '✍️', name: '笔顺描红', sub: '田字格里跟着写', cls: 'g6' },
     { id: 'read', emo: '📖', name: '朗读小站', sub: '课文短句跟读', cls: 'g7' },
+    { id: 'text', emo: '📚', name: '课文朗读', sub: '古诗·课文·自动注音', cls: 'g11' },
     { id: 'mix', emo: '🎪', name: '每日挑战', sub: '综合大闯关 15 题', cls: 'g10' }
   ];
 
@@ -1064,6 +1066,401 @@
     return host;
   }
 
+  /* ---------------- 视图：课文朗读 ---------------- */
+  var LT = global.LESSON_TEXTS || { meta: {}, poems: [], groups: [] };
+  var TONE_MARK = [['āēīōūǖ', 1], ['áéíóúǘ', 2], ['ǎěǐǒǔǚ', 3], ['àèìòùǜ', 4]];
+  var PUNCT = '\uFF0C\u3002\uFF01\uFF1F\u3001\uFF1B\uFF1A\u201C\u201D\u2018\u2019\uFF08\uFF09\u2026\u2014\u00B7\u300C\u300D\u300A\u300B\u3008\u3009,.!?;:()';
+
+  function pyTone(py) {
+    if (!py) return 0;
+    for (var i = 0; i < py.length; i++) {
+      for (var k = 0; k < TONE_MARK.length; k++) {
+        if (TONE_MARK[k][0].indexOf(py.charAt(i)) >= 0) return TONE_MARK[k][1];
+      }
+    }
+    return 0;
+  }
+
+  function lineChars(line) {
+    if (line && line.py && line.py.length) return line.py;
+    return String((line && line.cn) || '').split('').map(function (c) { return [c, '']; });
+  }
+
+  /** 把一段文字切成朗读句（保留标点，太长的在逗号处再切） */
+  function splitSentences(txt) {
+    var out = [], buf = '';
+    var s = String(txt || '').replace(/\r/g, '');
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charAt(i);
+      if (c === '\n') {
+        if (buf.trim()) out.push(buf.trim());
+        buf = '';
+        continue;
+      }
+      buf += c;
+      if ('。！？!?；;'.indexOf(c) >= 0) {
+        if (buf.trim()) out.push(buf.trim());
+        buf = '';
+      }
+    }
+    if (buf.trim()) out.push(buf.trim());
+    var res = [];
+    out.forEach(function (line) {
+      if (line.length <= 26) { res.push(line); return; }
+      var part = '';
+      for (var j = 0; j < line.length; j++) {
+        var ch = line.charAt(j);
+        part += ch;
+        if ('，,、'.indexOf(ch) >= 0 && part.length >= 8) { res.push(part.trim()); part = ''; }
+      }
+      if (part.trim()) res.push(part.trim());
+    });
+    return res;
+  }
+
+  var proLoading = null;
+  function loadPinyinPro() {
+    if (global.pinyinPro) return Promise.resolve(global.pinyinPro);
+    if (proLoading) return proLoading;
+    proLoading = new Promise(function (res, rej) {
+      var s = document.createElement('script');
+      s.src = 'assets/pinyin-pro.min.js';
+      s.onload = function () { if (global.pinyinPro) res(global.pinyinPro); else rej(new Error('empty')); };
+      s.onerror = function () { proLoading = null; rej(new Error('load')); };
+      document.head.appendChild(s);
+    });
+    return proLoading;
+  }
+
+  function annotate(text) {
+    var src = String(text || '');
+    var pro = global.pinyinPro;
+    if (pro) {
+      try {
+        var arr = pro.pinyin(src, { type: 'all' }) || [];
+        if (arr.length === src.length) {
+          return arr.map(function (o) { return [o.origin || '', o.pinyin || '']; });
+        }
+      } catch (e) { /* 退回逐字空拼音 */ }
+    }
+    return src.split('').map(function (c) { return [c, '']; });
+  }
+
+  function viewText() {
+    var host = el('div', 'view');
+    var state = { tab: 'poem', item: null, cur: 0, py: Store.setting('pyOn') !== false };
+    var timers = [], tok = 0;
+
+    function clearTimers() {
+      for (var i = 0; i < timers.length; i++) clearTimeout(timers[i]);
+      timers = [];
+    }
+    function later(fn, ms) {
+      timers.push(setTimeout(function () { if (host.isConnected) fn(); }, ms));
+    }
+    function toneOn() { return Store.setting('showToneColor') !== false; }
+
+    /* ---------- 列表 ---------- */
+    function tabsHTML() {
+      function t(id, label) {
+        return '<button class="tab' + (state.tab === id ? ' on' : '') + '" data-tab="' + id + '">' + label + '</button>';
+      }
+      return '<div class="tabbar" id="txTabs">' +
+        t('poem', '古诗 ' + LT.poems.length) +
+        t('lesson', '课文句子 ' + ((LT.meta && LT.meta.sentences) || 0)) +
+        t('mine', '我的课文') + '</div>';
+    }
+
+    function poemMeta(p) {
+      var a = (p.dynasty ? p.dynasty + '·' : '') + (p.author || '');
+      return [a, p.book || '', (p.n || p.lines.length) + ' 句'].filter(function (x) { return x; }).join(' · ');
+    }
+
+    function renderList() {
+      clearTimers(); tok++; S.stop();
+      state.item = null;
+      var html = '<div class="sect-h" style="margin-top:0"><h2>课文朗读</h2><span>' +
+        (state.tab === 'mine' ? '粘贴课文，自动加拼音' : '听一句，读一句') + '</span></div>' + tabsHTML();
+
+      if (state.tab === 'poem') {
+        html += '<p class="tx-hint">古诗都是公有作品，全文都在这里。点一首就开始。</p><div class="tx-list">';
+        LT.poems.forEach(function (p, i) {
+          html += '<button class="tx-card" data-poem="' + i + '">' +
+            '<span class="tx-t">' + p.title + '</span>' +
+            '<span class="tx-m">' + poemMeta(p) + '</span></button>';
+        });
+        html += '</div>';
+      } else if (state.tab === 'lesson') {
+        html += '<p class="tx-hint">课本里的句子，按单元分组。点一句就从那一句开始读。</p>';
+        LT.groups.forEach(function (g, gi) {
+          html += '<div class="tx-group"><h3>' + g.title + '<small>' + g.lines.length + ' 句</small></h3>';
+          g.lines.forEach(function (ln, li) {
+            html += '<button class="tx-sent" data-g="' + gi + '" data-l="' + li + '">' + ln.cn + '</button>';
+          });
+          html += '</div>';
+        });
+      } else {
+        var saved = Store.get().customText || '';
+        html += '<p class="tx-hint">把课文粘进来（或照着课本打），会自动加拼音，然后一句一句读。</p>' +
+          '<textarea class="tx-ta" id="txTa" placeholder="例：天气凉了，树叶黄了。一片片叶子从树上落下来。">' + saved + '</textarea>' +
+          '<div class="btn-row" style="max-width:560px">' +
+          '<button class="btn primary" id="txGen">生成拼音 · 开始读</button>' +
+          '<button class="btn ghost" id="txClear">清空</button></div>' +
+          '<p class="tx-hint" id="txTaTip">课文全文有版权，这里不内置；自己粘进来就都能读。</p>';
+      }
+
+      host.innerHTML = html;
+      bindList();
+    }
+
+    function bindList() {
+      host.querySelectorAll('#txTabs .tab').forEach(function (b) {
+        b.onclick = function () { sfx('tap'); state.tab = b.dataset.tab; renderList(); };
+      });
+      host.querySelectorAll('[data-poem]').forEach(function (b) {
+        b.onclick = function () {
+          sfx('tap');
+          var p = LT.poems[+b.dataset.poem];
+          open({ title: p.title, meta: poemMeta(p), lines: p.lines, from: 'poem' });
+        };
+      });
+      host.querySelectorAll('[data-g]').forEach(function (b) {
+        b.onclick = function () {
+          sfx('tap');
+          var g = LT.groups[+b.dataset.g];
+          open({ title: g.title, meta: g.lines.length + ' 句 · 课本短句', lines: g.lines, from: 'lesson' }, +b.dataset.l);
+        };
+      });
+      var gen = host.querySelector('#txGen');
+      if (gen) {
+        var ta = host.querySelector('#txTa');
+        gen.onclick = function () {
+          sfx('tap');
+          var raw = (ta.value || '').trim();
+          if (!raw) { toast('先粘贴一段课文哦'); ta.focus(); return; }
+          if (raw.length > 2000) { toast('太长啦，先粘一小段（2000 字以内）'); return; }
+          Store.set('customText', raw);
+          var tip = host.querySelector('#txTaTip');
+          tip.textContent = '正在加拼音…';
+          function go(noPy) {
+            if (!host.isConnected) return;
+            var lines = splitSentences(raw).slice(0, 60).map(function (cn) {
+              return { cn: cn, py: noPy ? null : annotate(cn) };
+            });
+            open({
+              title: '我的课文',
+              meta: lines.length + ' 句 · ' + (noPy ? '无拼音' : '自动注音'),
+              lines: lines, from: 'mine'
+            });
+          }
+          loadPinyinPro().then(function () { go(false); }).catch(function () {
+            toast('拼音包没加载上，先按没有拼音朗读');
+            go(true);
+          });
+        };
+        host.querySelector('#txClear').onclick = function () { ta.value = ''; Store.set('customText', ''); ta.focus(); };
+      }
+    }
+
+    /* ---------- 阅读舞台 ---------- */
+    function open(item, start) {
+      state.item = item;
+      state.cur = start || 0;
+      renderRead();
+    }
+
+    function renderRead() {
+      clearTimers(); tok++; S.stop();
+      var it = state.item;
+      var html = '<div class="tx-top">' +
+        '<button class="btn ghost sm" id="txBack">← 列表</button>' +
+        '<span class="tx-prog" id="txProg"></span></div>' +
+        '<div class="tx-head"><h2>' + it.title + '</h2>' +
+        (it.meta ? '<p>' + it.meta + '</p>' : '') + '</div>' +
+        '<div class="tx-body' + (state.py ? '' : ' nopy') + '" id="txBody"></div>' +
+        '<div class="btn-row" style="max-width:560px">' +
+        '<button class="btn blue" id="txPlay">🔊 整篇连读</button>' +
+        '<button class="btn ghost" id="txStop">⏹ 停</button></div>' +
+        '<div class="btn-row" style="max-width:560px">' +
+        '<button class="btn ghost" id="txPrev">⬅ 上一句</button>' +
+        '<button class="btn ghost" id="txSlow">🐢 慢读</button>' +
+        '<button class="btn ghost" id="txNext">下一句 ➡</button></div>' +
+        '<div class="btn-row" style="max-width:560px">' +
+        '<button class="btn ghost" id="txPy">拼音：' + (state.py ? '开' : '关') + '</button>' +
+        '<button class="btn primary" id="txMic">🎤 跟读这句</button></div>' +
+        '<div class="stroke-count" id="txTip">点任意一句，听这一句</div>';
+
+      host.innerHTML = html;
+      var body = host.querySelector('#txBody');
+      it.lines.forEach(function (ln, i) {
+        var b = el('button', 'tl-line');
+        b.dataset.i = i;
+        lineChars(ln).forEach(function (pair) {
+          var ch = pair[0], py = pair[1] || '';
+          var u = el('span', 'u' + ((!py || PUNCT.indexOf(ch) >= 0) ? ' pm' : ''));
+          var pi = el('i', 'py' + (toneOn() ? ' ' + (TONE_CLS[pyTone(py)] || '') : ''), py);
+          var zi = el('b', 'zi', ch);
+          u.appendChild(pi);
+          u.appendChild(zi);
+          b.appendChild(u);
+        });
+        b.onclick = function () { sfx('tap'); speakLine(i, 0.85, null); };
+        body.appendChild(b);
+      });
+
+      host.querySelector('#txBack').onclick = function () { sfx('tap'); clearTimers(); tok++; S.stop(); renderList(); };
+      host.querySelector('#txPlay').onclick = function () { sfx('tap'); readAll(); };
+      host.querySelector('#txStop').onclick = function () { stopAll(); toast('停下啦'); };
+      host.querySelector('#txPrev').onclick = function () { speakLine((state.cur - 1 + it.lines.length) % it.lines.length, 0.85, null); };
+      host.querySelector('#txNext').onclick = function () { speakLine((state.cur + 1) % it.lines.length, 0.85, null); };
+      host.querySelector('#txSlow').onclick = function () { sfx('tap'); speakLine(state.cur, 0.55, null); };
+      host.querySelector('#txPy').onclick = function () {
+        state.py = !state.py;
+        Store.setting('pyOn', state.py);
+        body.classList.toggle('nopy', !state.py);
+        this.textContent = '拼音：' + (state.py ? '开' : '关');
+        sfx('tap');
+      };
+      host.querySelector('#txMic').onclick = function () { mic(this); };
+
+      markCur(state.cur, true);
+    }
+
+    function updateProg() {
+      var n = host.querySelector('#txProg');
+      if (n && state.item) n.textContent = (state.cur + 1) + ' / ' + state.item.lines.length;
+    }
+
+    function markCur(i, scroll) {
+      state.cur = i;
+      host.querySelectorAll('.tl-line').forEach(function (n) {
+        n.classList.toggle('cur', +n.dataset.i === i);
+        if (+n.dataset.i === i && scroll && n.scrollIntoView) {
+          try { n.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { }
+        }
+      });
+      updateProg();
+    }
+
+    function unitsOf(i) { return host.querySelectorAll('.tl-line[data-i="' + i + '"] .u'); }
+
+    function speakLine(i, rate, done) {
+      var it = state.item;
+      if (!it || !it.lines[i]) return;
+      clearTimers();
+      markCur(i, true);
+      rate = rate || 0.85;
+      var units = unitsOf(i);
+      for (var k = 0; k < units.length; k++) units[k].classList.remove('hot', 'done');
+
+      var ln = it.lines[i];
+      var voice = S.hasVoice ? S.hasVoice() : true;
+      var t0 = Date.now();
+      var per = 420 / rate;
+      var hold = voice ? 0 : units.length * per;
+      var fin = false;
+      function paint(idx) {
+        for (var m = 0; m < units.length; m++) {
+          units[m].classList.toggle('hot', m === idx);
+          if (idx >= 0 && m < idx) units[m].classList.add('done');
+        }
+      }
+      function finish() {
+        if (fin) return;
+        fin = true;
+        for (var m = 0; m < units.length; m++) units[m].classList.remove('hot');
+        if (!done) return;
+        var wait = Math.max(0, hold - (Date.now() - t0));
+        if (wait) later(done, wait); else done();
+      }
+      S.say(ln.cn, {
+        rate: rate,
+        onboundary: function (e) {
+          var ci = e && typeof e.charIndex === 'number' ? e.charIndex : -1;
+          if (ci < 0) return;
+          paint(ci);
+        },
+        onend: finish
+      });
+      if (!voice) {
+        // 没有中文语音时，用光标扫一遍，让孩子知道读到哪里
+        for (var q = 0; q < units.length; q++) {
+          (function (idx) {
+            later(function () { paint(idx); }, Math.round(idx * per));
+          })(q);
+        }
+      }
+      later(finish, Math.round(voice ? Math.max(1800, ln.cn.length * 480 / rate) : hold + 200));
+    }
+
+    function readAll() {
+      var it = state.item;
+      if (!it) return;
+      var my = ++tok;
+      clearTimers();
+      var i = 0;
+      function step() {
+        if (my !== tok || !host.isConnected) return;
+        if (i >= it.lines.length) { finished(); return; }
+        speakLine(i, 0.85, function () {
+          i++;
+          later(step, 280);
+        });
+      }
+      step();
+    }
+
+    function finished() {
+      var n = (Store.get().readTexts = (Store.get().readTexts || 0) + 1);
+      Store.addStars(3);
+      refreshStars(true);
+      sfx('star');
+      toast('读完啦！这次 +3 ⭐');
+      if (n >= 5) grantBadge('read-text');
+      var tip = host.querySelector('#txTip');
+      if (tip) tip.textContent = '👏 读得真好！可以点「跟读这句」试试';
+    }
+
+    function stopAll() {
+      tok++;
+      clearTimers();
+      S.stop();
+    }
+
+    function mic(btn) {
+      var it = state.item;
+      if (!it) return;
+      if (!S.recognition.supported) { toast('这个浏览器不支持跟读评分，先跟着范读读吧'); return; }
+      var line = it.lines[state.cur];
+      var tip = host.querySelector('#txTip');
+      btn.classList.add('rec');
+      tip.textContent = '请朗读…';
+      S.recognition.start(function (type, data) {
+        if (type === 'end') {
+          btn.classList.remove('rec');
+          var res = S.score(line.cn, data);
+          var n = (Store.get().readCount = (Store.get().readCount || 0) + 1);
+          if (res.level === 'perfect' || res.level === 'good') {
+            sfx('right');
+            Store.addStars(2);
+            refreshStars(true);
+            if (n >= 10) grantBadge('read-10');
+            tip.textContent = '👏 读得真棒！';
+          } else {
+            tip.textContent = '再试一次，先听一遍范读～';
+            speakLine(state.cur, 0.6, null);
+          }
+        } else if (type === 'error') {
+          btn.classList.remove('rec');
+          tip.textContent = data === 'not-allowed' ? '没有麦克风权限，请在浏览器设置里允许' : '没听清，再来一次吧';
+        }
+      });
+    }
+
+    renderList();
+    return host;
+  }
+
   /* ---------------- 视图：徽章 / 设置 ---------------- */
   function viewBadges() {
     var host = el('div', 'view');
@@ -1178,6 +1575,7 @@
     '#/char/play': { title: '认字卡', view: viewCharPicker },
     '#/write': { title: '笔顺描红', view: viewWrite },
     '#/read': { title: '朗读小站', view: viewRead },
+    '#/text': { title: '课文朗读', view: viewText },
     '#/badges': { title: '我的徽章', view: viewBadges },
     '#/settings': { title: '设置', view: viewSettings }
   };

@@ -103,6 +103,50 @@ const SHOT = 'F:\\harness0916\\pinyin-kid\\_shots';
   R.readChars = await page.locator('#cnLine .ch').count();
   await shot('12-read');
 
+  // ---- 课文朗读 ----
+  await page.evaluate(() => { location.hash = '#/text'; });
+  await page.waitForTimeout(500);
+  R.textTabs = await page.locator('.tabbar .tab').count();
+  R.textCards = await page.locator('.tx-card').count();
+  await shot('15-text-list');
+  await page.locator('.tx-card').first().click();
+  await page.waitForTimeout(600);
+  R.textTitle = await page.locator('.tx-head h2').innerText();
+  R.textLines = await page.locator('.tl-line').count();
+  R.textUnits = await page.locator('.tl-line .u').count();
+  R.textPinyin = await page.locator('.tl-line .u .py').first().innerText();
+  const starsBefore = Number(await page.locator('#starCount').innerText());
+  await page.locator('#txPlay').click();
+  await page.waitForTimeout(1600);
+  R.textCur = await page.locator('.tl-line.cur').count();
+  R.textHot = await page.locator('.tl-line.cur .u.hot').count();
+  await shot('16-text-read');
+  await page.waitForTimeout(14000);   // 无语音环境下按字扫一遍，4 句约 12 秒
+  R.textStars = [starsBefore, Number(await page.locator('#starCount').innerText())];
+  R.textReads = await page.evaluate(() => (JSON.parse(localStorage.getItem('pinyin-planet-v1')) || {}).readTexts);
+  await page.locator('#txPy').click();
+  await page.waitForTimeout(200);
+  R.textNoPy = await page.locator('.tx-body.nopy').count();
+  await page.locator('#txPy').click();
+  await page.locator('#txBack').click();
+  await page.waitForTimeout(300);
+  // 课文句子 tab
+  await page.locator('.tab', { hasText: '课文句子' }).click();
+  await page.waitForTimeout(300);
+  R.textSents = await page.locator('.tx-sent').count();
+  R.textGroups = await page.locator('.tx-group').count();
+  await shot('17-text-lessons');
+  // 我的课文 tab：粘贴 → 自动注音
+  await page.locator('.tab', { hasText: '我的课文' }).click();
+  await page.waitForTimeout(300);
+  await page.locator('#txTa').fill('天气凉了，树叶黄了。\n一片片叶子从树上落下来。');
+  await page.locator('#txGen').click();
+  await page.waitForTimeout(2500);
+  R.mineLines = await page.locator('.tl-line').count();
+  R.minePy = await page.evaluate(() => [...document.querySelectorAll('.tl-line .u .py')].map(n => n.textContent).filter(Boolean).join(' '));
+  R.mineUnits = await page.locator('.tl-line .u').count();
+  await shot('18-text-mine');
+
   // ---- 设置 / 徽章 ----
   await page.evaluate(() => { location.hash = '#/settings'; });
   await page.waitForTimeout(500);

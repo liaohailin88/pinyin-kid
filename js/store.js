@@ -123,6 +123,12 @@
 
     hasBadge: function (id) { return !!load().badges[id]; },
 
+    /** 存任意自定义字段（如 customText） */
+    set: function (k, v) {
+      var s = load();
+      s[k] = v; save(); return v;
+    },
+
     setting: function (k, v) {
       var s = load();
       if (v === undefined) return s.settings[k];
